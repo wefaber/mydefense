@@ -1,9 +1,15 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { Link, useRouter, useSearch } from '@tanstack/react-router'
 import { Button, Chip, Field } from '@wefaber/ui'
 import { useState, type FormEvent } from 'react'
 import { FormField, IssueSummary } from '../../components/FormField'
-import { login, register, resetSession } from '../../lib/account'
+import {
+  githubLoginQuery,
+  login,
+  register,
+  resetSession,
+} from '../../lib/account'
 
 type Mode = 'login' | 'register'
 
@@ -42,7 +48,8 @@ function issuesOf(
 }
 
 export function AuthPage() {
-  const { next } = useSearch({ from: '/cuenta/entrar' })
+  const { next, error } = useSearch({ from: '/cuenta/entrar' })
+  const githubOrg = useQuery(githubLoginQuery).data
   const router = useRouter()
   const client = useQueryClient()
   const [mode, setMode] = useState<Mode>('login')
@@ -132,6 +139,26 @@ export function AuthPage() {
           o dirigirlo. No pedimos correo.
         </p>
       </header>
+      {error === 'github' && (
+        <p role="alert" className="text-body-lg text-danger">
+          No pudimos entrar con GitHub. Probá de nuevo.
+        </p>
+      )}
+      {githubOrg && (
+        <div className="flex flex-col gap-2">
+          <Button
+            variant="secondary"
+            size="lg"
+            onClick={() => window.location.assign('/auth/github/start')}
+          >
+            Entrar con GitHub
+          </Button>
+          <p className="text-body text-muted">
+            Crear equipos es para miembros de la organización {githubOrg} en
+            GitHub. No pedimos correo.
+          </p>
+        </div>
+      )}
       <div role="group" aria-label="Qué querés hacer" className="flex gap-2">
         <Chip
           className="h-11 px-3 sm:h-7"

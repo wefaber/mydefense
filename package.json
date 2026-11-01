@@ -29,6 +29,7 @@
     "@wefaber/ui": "^0.3.2",
     "@whatwg-node/server-plugin-cookies": "^2.0.1",
     "animejs": "^4.5.0",
+    "arctic": "3.7.0",
     "drizzle-orm": "^0.45.4",
     "elysia": "^1.4.30",
     "graphql": "^17.0.2",

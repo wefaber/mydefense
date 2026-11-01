@@ -199,6 +199,24 @@ export const recoveryCodes = sqliteTable(
   (t) => [uniqueIndex('recovery_codes_user_hash').on(t.userId, t.codeHash)],
 )
 
+/**
+ * A GitHub sign-in linked to a user. Only the numeric GitHub id and the org check are kept: never the OAuth token,
+ * never the email. `checked_at` drives the 24 h re-verification before a team can be created.
+ */
+export const githubLinks = sqliteTable(
+  'github_links',
+  {
+    userId: text('user_id')
+      .primaryKey()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    githubId: text('github_id').notNull(),
+    org: text('org').notNull(),
+    member: integer('member', { mode: 'boolean' }).notNull(),
+    checkedAt: text('checked_at').notNull(),
+  },
+  (t) => [uniqueIndex('github_links_github_id').on(t.githubId)],
+)
+
 export const members = sqliteTable(
   'members',
   {

@@ -27,17 +27,18 @@ mydefense/
 
 ## Ports and env
 
-| Var                   | Default             | Notes                                                                                                                                   |
-| --------------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `MYDEFENSE_PORT`      | `5191`              | Loopback only (`127.0.0.1`); Nginx fronts it                                                                                            |
-| `MYDEFENSE_DB`        | `data/mydefense.db` | Prod: `/home/hermes/data/mydefense/mydefense.db`                                                                                        |
-| `MYDEFENSE_DIST`      | `dist`              | Built SPA                                                                                                                               |
-| `MYDEFENSE_FILES`     | `<db dir>/files`    | Uploaded material (`<teamId>/<id>`), never in the docroot                                                                               |
-| `MYDEFENSE_KEY_FILE`  | unset               | Server key file for accounts; keep outside the repo                                                                                     |
-| `DEEPSEEK_API_KEY`    | unset               | Turns grading on (DeepSeek); or `MYDEFENSE_LLM_URL` / `_MODEL` / `_KEY` for another endpoint                                            |
-| `MYDEFENSE_BOARD_URL` | unset               | Board base URL; with `MYDEFENSE_BOARD_TOKEN` turns evidence on. `MYDEFENSE_BOARD_TEAMS` maps `team=board,…` (default `eternum=eternum`) |
-| `CARTESIA_API_KEY`    | unset               | Turns voice answers on (needs the LLM too); `CARTESIA_VERSION` optional                                                                 |
-| `NODE_ENV`            |                     | `production` turns GraphiQL off, session cookie `Secure`                                                                                |
+| Var                                                                            | Default             | Notes                                                                                                                                                       |
+| ------------------------------------------------------------------------------ | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MYDEFENSE_PORT`                                                               | `5191`              | Loopback only (`127.0.0.1`); Nginx fronts it                                                                                                                |
+| `MYDEFENSE_DB`                                                                 | `data/mydefense.db` | Prod: `/home/hermes/data/mydefense/mydefense.db`                                                                                                            |
+| `MYDEFENSE_DIST`                                                               | `dist`              | Built SPA                                                                                                                                                   |
+| `MYDEFENSE_FILES`                                                              | `<db dir>/files`    | Uploaded material (`<teamId>/<id>`), never in the docroot                                                                                                   |
+| `MYDEFENSE_KEY_FILE`                                                           | unset               | Server key file for accounts; keep outside the repo                                                                                                         |
+| `MYDEFENSE_GITHUB_ORG`, `_CLIENT_ID`, `_CLIENT_SECRET`, `MYDEFENSE_PUBLIC_URL` | unset               | GitHub login and org-gated team creation (ADR 0004). All four or none. `PUBLIC_URL` is the site origin; the callback is `<PUBLIC_URL>/auth/github/callback` |
+| `DEEPSEEK_API_KEY`                                                             | unset               | Turns grading on (DeepSeek); or `MYDEFENSE_LLM_URL` / `_MODEL` / `_KEY` for another endpoint                                                                |
+| `MYDEFENSE_BOARD_URL`                                                          | unset               | Board base URL; with `MYDEFENSE_BOARD_TOKEN` turns evidence on. `MYDEFENSE_BOARD_TEAMS` maps `team=board,…` (default `eternum=eternum`)                     |
+| `CARTESIA_API_KEY`                                                             | unset               | Turns voice answers on (needs the LLM too); `CARTESIA_VERSION` optional                                                                                     |
+| `NODE_ENV`                                                                     |                     | `production` turns GraphiQL off, session cookie `Secure`                                                                                                    |
 
 Server env file: `~/deploy/env/mydefense.env`. Never in the repo.
 
@@ -54,7 +55,7 @@ Deviation from the ROADMAP domain model: a point's question has `group = point`,
 "own" or "cross" depends on who is practicing (the point's owner identity), so the client derives it. Groups:
 `point | bank | topic | custom`.
 
-F2 tables: `users`, `sessions`, `recovery_codes`, `members`, `invites`, `materials`. Authenticated reads and writes go
+F2 tables: `users`, `sessions`, `recovery_codes`, `github_links`, `members`, `invites`, `materials`. Authenticated reads and writes go
 through `server/db/workspace.ts` (`Workspace`): non-members get `NOT_FOUND` (a private team does not exist for them),
 members who are not directors get `FORBIDDEN` on writes. The last director cannot be removed or demoted. Isolation
 tests: `server/db/workspace.test.ts`, `server/auth.test.ts`.
@@ -67,6 +68,10 @@ tests: `server/db/workspace.test.ts`, `server/auth.test.ts`.
 Accounts: `@wefaber/accounts` (argon2id, recovery codes, no email). Session cookie `md_session` (HttpOnly, SameSite=Lax,
 Path=/, Secure in production); only a sha256 of the token is stored. Auth, team, identity, invite, member and material
 mutations live in `server/graphql/schema.ts`, rate limited.
+
+GitHub login (ADR 0004): `GET /auth/github/start` and `/auth/github/callback` in `server/github-login.ts`, OAuth through
+`arctic`, scope `read:org`. The membership result is stored with `checked_at` and the OAuth token is never stored.
+`createTeam` needs a member of the configured org checked within 24 h. Nginx forwards `/auth/github/*` to the app.
 
 Upload: `POST /api/teams/:slug/materials` (multipart `file`). Extension → mime allowlist, magic-byte check, 10 MB, 50 per
 team. No download endpoint yet (F4 reads files server side).

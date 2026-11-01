@@ -23,6 +23,18 @@ export const meQuery = queryOptions({
   staleTime: 5 * 60_000,
 })
 
+/** The org whose members may create teams; null when GitHub login is off on this server. */
+export const githubLoginQuery = queryOptions({
+  queryKey: ['github-login'],
+  queryFn: async () =>
+    (
+      await gql<{ capabilities: { githubOrg: string | null } }>(
+        `{ capabilities { githubOrg } }`,
+      )
+    ).capabilities.githubOrg,
+  staleTime: 5 * 60_000,
+})
+
 export const myTeamsQuery = queryOptions({
   queryKey: ['my-teams'],
   queryFn: async () =>
