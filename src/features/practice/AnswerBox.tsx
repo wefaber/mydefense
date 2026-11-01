@@ -32,13 +32,22 @@ export function AnswerBox({
   expired?: boolean
 }) {
   const [text, setText] = useState('')
-  const [spokenMs, setSpokenMs] = useState<number | null>(null)
+  // How long the recording lasted; only read when submitting, never rendered.
+  const spokenMs = useRef<number | null>(null)
   const [phase, setPhase] = useState<Phase>('idle')
   const [voiceError, setVoiceError] = useState<string | null>(null)
   const recorder = useRef<Recorder | null>(null)
   const submitted = useRef(false)
 
-  useEffect(() => () => recorder.current?.cancel(), [])
+  const mounted = useRef(true)
+
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      recorder.current?.cancel()
+    }
+  }, [])
 
   const grade = useMutation({
     mutationFn: (v: { answer: string; spokenMs: number | null }) =>
@@ -71,7 +80,7 @@ export function AnswerBox({
     try {
       await rec.start()
       setText('')
-      setSpokenMs(null)
+      spokenMs.current = null
       setPhase('recording')
     } catch (e) {
       recorder.current = null
@@ -86,10 +95,11 @@ export function AnswerBox({
     setPhase('transcribing')
     const { text: heard, ms } = await rec.stop()
     recorder.current = null
+    if (!mounted.current) return
     setPhase('idle')
     if (heard) {
       setText(heard)
-      setSpokenMs(ms)
+      spokenMs.current = ms
       if (thenSubmit) submit(heard, ms)
     } else {
       if (thenSubmit) submit('', null)
@@ -103,7 +113,7 @@ export function AnswerBox({
   useEffect(() => {
     if (!expired || submitted.current) return
     if (phase === 'recording') void stop(true)
-    else if (phase === 'idle') submit(text, spokenMs)
+    else if (phase === 'idle') submit(text, spokenMs.current)
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [expired, phase])
 
@@ -128,7 +138,7 @@ export function AnswerBox({
         placeholder="Escribila con tus palabras, o grabala."
         onChange={(e) => {
           setText(e.target.value)
-          setSpokenMs(null)
+          spokenMs.current = null
         }}
       />
       <div className="flex flex-wrap items-center gap-2">
@@ -159,7 +169,7 @@ export function AnswerBox({
           variant="primary"
           size="lg"
           disabled={busy || grade.isPending || text.trim() === ''}
-          onClick={() => submit(text, spokenMs)}
+          onClick={() => submit(text, spokenMs.current)}
         >
           {grade.isPending ? 'Corrigiendo…' : 'Corregir'}
         </Button>
