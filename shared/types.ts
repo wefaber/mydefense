@@ -19,6 +19,27 @@ export type ResourceKind = (typeof RESOURCE_KINDS)[number]
 export const GRADES = ['complete', 'partial', 'insufficient'] as const
 export type Grade = (typeof GRADES)[number]
 
+/** What the session recap reads about one graded answer: the verdict and what it hung on, never the student's wording. */
+export interface RecapGrading {
+  verdict: Grade
+  criteria: { content: number; terminology: number; structure: number }
+  covered: string[]
+  missing: string[]
+  unsupported: string[]
+  referenceIssue: string
+  argument: string
+  delivery: {
+    wpm: number | null
+    fillers: { word: string; count: number }[]
+  } | null
+}
+
+/** One answer of a finished quiz or simulacro. `grading` is null when it was skipped or could not be graded. */
+export interface RecapAnswer {
+  question: string
+  grading: RecapGrading | null
+}
+
 /** Page size limits for list fields. */
 export const PAGE_MAX = 100
 export const clampPage = (n: number | null | undefined): number =>

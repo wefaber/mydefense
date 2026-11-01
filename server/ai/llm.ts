@@ -3,17 +3,23 @@
  * `MYDEFENSE_LLM_URL` / `_MODEL` / `_KEY` point it anywhere else (Ether's gateway, OpenRouter with ZDR).
  * Lifted from eternum-board (`server/llm.ts`), minus streaming and cache: grading is one short call.
  */
+/** DeepSeek thinking effort. The API has no `medium`: it maps `medium` to `high`. */
+export type Effort = 'low' | 'high' | 'max'
+
 export interface Llm {
-  /** One completion. `json` asks the endpoint for a JSON object when it supports it. */
+  /**
+   * One completion. `json` asks the endpoint for a JSON object when it supports it. `effort` sets DeepSeek's thinking
+   * effort (default `high`, DeepSeek's own default); other endpoints ignore it.
+   */
   complete(
     system: string,
     user: string,
-    opts?: { json?: boolean },
+    opts?: { json?: boolean; effort?: Effort },
   ): Promise<string>
 }
 
 export const DEEPSEEK_URL = 'https://api.deepseek.com/v1'
-export const DEEPSEEK_MODEL = 'deepseek-chat'
+export const DEEPSEEK_MODEL = 'deepseek-flash'
 const TIMEOUT_MS = 60_000
 
 export class LlmError extends Error {}
@@ -29,6 +35,7 @@ export function llmFromEnv(
   ).replace(/\/+$/, '')
   const model = env.MYDEFENSE_LLM_MODEL ?? (deepseek ? DEEPSEEK_MODEL : '')
   if (!base || !model) return null
+  const onDeepSeek = base === DEEPSEEK_URL
   return {
     async complete(system, user, opts) {
       let res: Response
@@ -41,7 +48,13 @@ export function llmFromEnv(
           },
           body: JSON.stringify({
             model,
-            temperature: 0.1,
+            // Thinking mode on DeepSeek takes no temperature; other endpoints keep the low one.
+            ...(onDeepSeek
+              ? {
+                  thinking: { type: 'enabled' },
+                  reasoning_effort: opts?.effort ?? 'high',
+                }
+              : { temperature: 0.1 }),
             ...(opts?.json ? { response_format: { type: 'json_object' } } : {}),
             messages: [
               { role: 'system', content: system },

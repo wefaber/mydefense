@@ -1,7 +1,7 @@
 // Tests for `src/lib/simulacro.ts` (pure). They live here because only the server tsconfig carries the bun test types.
 import { expect, test } from 'bun:test'
 import type { Grading } from '../src/lib/answer'
-import { buildRun, summarize } from '../src/lib/simulacro'
+import { buildRun, recapAnswers, summarize } from '../src/lib/simulacro'
 
 const points = [
   { id: 'p1', ownerId: 'me' },
@@ -104,4 +104,35 @@ test('summarize of nothing is all zeros, not NaN', () => {
   const s = summarize([])
   expect(s.criteria).toEqual({ content: 0, terminology: 0, structure: 0 })
   expect(s.wpm).toBeNull()
+})
+
+test('the recap input keeps the verdict and what it hung on, never the student wording', () => {
+  const [first, skipped] = recapAnswers([
+    {
+      question: q('a', 'p1'),
+      grading: grading({
+        answer: 'mi respuesta textual',
+        feedback: 'texto para el estudiante',
+        sources: [],
+        verdict: 'partial',
+        covered: ['resiste GPU'],
+        missing: ['firma'],
+        delivery: { words: 40, wpm: 120, fillers: [{ word: 'eh', count: 2 }] },
+      }),
+    },
+    { question: q('b', 'p2'), grading: null },
+  ])
+  expect(first?.question).toBe('a')
+  expect(first?.grading).toEqual({
+    verdict: 'partial',
+    criteria: { content: 2, terminology: 2, structure: 2 },
+    covered: ['resiste GPU'],
+    missing: ['firma'],
+    unsupported: [],
+    referenceIssue: '',
+    argument: '',
+    delivery: { wpm: 120, fillers: [{ word: 'eh', count: 2 }] },
+  })
+  expect(JSON.stringify(first)).not.toContain('mi respuesta textual')
+  expect(skipped?.grading).toBeNull()
 })

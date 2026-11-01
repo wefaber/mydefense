@@ -5,10 +5,12 @@ import type { Grade } from '../../../shared/types'
 import { capabilitiesQuery, type Grading } from '../../lib/answer'
 import { addGrade, useProgress } from '../../lib/progress'
 import type { Question } from '../../lib/queries'
+import type { RunResult } from '../../lib/simulacro'
 import { usePracticeContext } from './context'
 import { asString } from '../../lib/coerce'
 import { AnswerBox, GradingPanel } from './AnswerBox'
 import { Empty, Lead, Note } from './parts'
+import { SessionRecap } from './SessionRecap'
 
 type Pool = 'mine' | 'cross' | 'bank' | 'topic'
 
@@ -52,6 +54,11 @@ export function QuizView() {
   const [queue, setQueue] = useState<Question[]>(() => shuffle(poolOf('mine')))
   const [shown, setShown] = useState(false)
   const [graded, setGraded] = useState<Grading | null>(null)
+  // The round so far: each answer with its correction (when there was one) and the verdict the student settled on.
+  const [round, setRound] = useState<
+    (RunResult<Question> & { verdict: Grade })[]
+  >([])
+  const [ended, setEnded] = useState(false)
   const caps = useQuery(capabilitiesQuery).data
 
   const current = queue.at(-1) ?? null
@@ -65,6 +72,11 @@ export function QuizView() {
 
   const grade = (g: Grade) => {
     addGrade(team.slug, me.key, g)
+    if (current)
+      setRound((all) => [
+        ...all,
+        { question: current, grading: graded, verdict: g },
+      ])
     const rest = queue.slice(0, -1)
     setQueue(rest.length ? rest : shuffle(poolOf(pool)))
     setShown(false)
@@ -75,6 +87,46 @@ export function QuizView() {
     complete: 0,
     partial: 0,
     insufficient: 0,
+  }
+
+  if (ended) {
+    const count = (g: Grade) => round.filter((a) => a.verdict === g).length
+    const anyGraded = round.some((a) => a.grading)
+    return (
+      <div className="flex flex-col gap-4">
+        {caps?.grading && anyGraded ? (
+          <SessionRecap
+            teamSlug={team.slug}
+            results={round}
+            title="Resultado de la ronda"
+            onRevised={(id, g) =>
+              setRound((all) =>
+                all.map((a) =>
+                  a.question.id === id ? { ...a, grading: g } : a,
+                ),
+              )
+            }
+          />
+        ) : (
+          <p className="text-body-lg">
+            Ronda: {count('complete')} completas, {count('partial')} parciales,{' '}
+            {count('insufficient')} insuficientes.
+          </p>
+        )}
+        <div>
+          <Button
+            size="lg"
+            variant="primary"
+            onClick={() => {
+              setRound([])
+              setEnded(false)
+            }}
+          >
+            Seguir practicando
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -176,6 +228,13 @@ export function QuizView() {
         Tus respuestas: {tally.complete} completas, {tally.partial} parciales,{' '}
         {tally.insufficient} insuficientes. Tu progreso queda en este navegador.
       </p>
+      {round.length > 0 && (
+        <div>
+          <Button variant="secondary" onClick={() => setEnded(true)}>
+            Terminar y ver el resumen
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

@@ -2,29 +2,14 @@ import { useQuery } from '@tanstack/react-query'
 import { Button, Chip } from '@wefaber/ui'
 import { Timer } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import {
-  CRITERIA_LABELS,
-  capabilitiesQuery,
-  type Grading,
-} from '../../lib/answer'
+import { capabilitiesQuery, type Grading } from '../../lib/answer'
 import { addGrade } from '../../lib/progress'
 import type { Question } from '../../lib/queries'
-import {
-  SECONDS,
-  SIZES,
-  buildRun,
-  summarize,
-  type RunResult,
-} from '../../lib/simulacro'
+import { SECONDS, SIZES, buildRun, type RunResult } from '../../lib/simulacro'
 import { AnswerBox, GradingPanel } from './AnswerBox'
 import { usePracticeContext } from './context'
-import { Empty, Fold, Lead, Note } from './parts'
-
-const VERDICT_LABEL = {
-  complete: 'Completa',
-  partial: 'Parcial',
-  insufficient: 'Insuficiente',
-} as const
+import { Empty, Lead } from './parts'
+import { SessionRecap } from './SessionRecap'
 
 /** Ticks while `active`; the clock is wall time, so a throttled background tab still shows the right second. */
 function useNow(active: boolean): number {
@@ -233,74 +218,14 @@ function Summary({
   onRevised: (questionId: string, g: Grading) => void
   onAgain: () => void
 }) {
-  const s = summarize(results)
-  const review = results.filter((r) => r.grading?.verdict !== 'complete')
   return (
     <div className="flex flex-col gap-5">
-      <section
-        aria-label="Resultado"
-        className="flex flex-col gap-3 rounded-tile border border-border bg-surface p-tile"
-      >
-        <h2 className="text-h2 font-semibold">Resultado del simulacro</h2>
-        <p className="text-body-lg">
-          {s.byVerdict.complete} completas, {s.byVerdict.partial} parciales,{' '}
-          {s.byVerdict.insufficient} insuficientes
-          {s.total > s.graded && <>, {s.total - s.graded} sin corregir</>}.
-        </p>
-        {s.graded > 0 && (
-          <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-3">
-            {(
-              Object.keys(CRITERIA_LABELS) as (keyof typeof CRITERIA_LABELS)[]
-            ).map((k) => (
-              <div key={k}>
-                <dt className="text-meta text-muted">{CRITERIA_LABELS[k]}</dt>
-                <dd className="text-body-lg font-medium tabular-nums">
-                  {s.criteria[k]} / 4
-                </dd>
-              </div>
-            ))}
-          </dl>
-        )}
-        {(s.wpm !== null || s.fillers > 0) && (
-          <p className="text-meta text-muted">
-            {s.wpm !== null && <>Ritmo medio {s.wpm} palabras por minuto. </>}
-            {s.fillers > 0 && <>{s.fillers} muletillas en total.</>}
-          </p>
-        )}
-      </section>
-      {review.length > 0 && (
-        <section aria-label="Para repasar" className="flex flex-col gap-2">
-          <h3 className="text-h3 font-semibold">Para repasar</h3>
-          {review.map((r) => (
-            <Fold
-              key={r.question.id}
-              summary={
-                <span className="flex flex-col">
-                  <span className="text-meta text-muted">
-                    {r.question.source} ·{' '}
-                    {r.grading
-                      ? VERDICT_LABEL[r.grading.verdict]
-                      : 'Sin corregir'}
-                  </span>
-                  {r.question.prompt}
-                </span>
-              }
-            >
-              {r.grading && (
-                <GradingPanel
-                  grading={r.grading}
-                  revision={{
-                    teamSlug,
-                    questionId: r.question.id,
-                    onRevised: (g) => onRevised(r.question.id, g),
-                  }}
-                />
-              )}
-              <Note label="Respuesta">{r.question.modelAnswer}</Note>
-            </Fold>
-          ))}
-        </section>
-      )}
+      <SessionRecap
+        teamSlug={teamSlug}
+        results={results}
+        title="Resultado del simulacro"
+        onRevised={onRevised}
+      />
       <div>
         <Button size="lg" variant="primary" onClick={onAgain}>
           Hacer otro simulacro
