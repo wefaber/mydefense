@@ -28,6 +28,7 @@ import {
 } from '../../shared/types.ts'
 import { AccessError } from '../db/workspace.ts'
 import type * as t from '../db/schema.ts'
+import { teamAccess } from '../github.ts'
 import { SESSION_COOKIE } from '../session.ts'
 import type { Services } from '../services.ts'
 
@@ -69,6 +70,36 @@ async function guardAsync<T>(fn: () => Promise<T>): Promise<T> {
 function need(ctx: Context): AccountUser {
   if (!ctx.viewer) throw fail('UNAUTHENTICATED', 'Ingresá para continuar.')
   return ctx.viewer
+}
+
+/** Creating a team is for members of the configured GitHub org, re-checked at each GitHub sign-in (ADR 0004). */
+async function creatorAccess(ctx: Context, userId: string): Promise<void> {
+  if (!ctx.github) {
+    throw fail(
+      'UNAVAILABLE',
+      'La creación de equipos no está disponible en este servidor.',
+    )
+  }
+  const link = await ctx.githubLinks.findByUser(userId)
+  switch (teamAccess(link, ctx.github.org, new Date())) {
+    case 'ok':
+      return
+    case 'reverify':
+      throw fail(
+        'REVERIFY',
+        'Volvé a entrar con GitHub para confirmar que seguís en la organización.',
+      )
+    case 'no-link':
+      throw fail(
+        'FORBIDDEN',
+        'Para crear un equipo entrá con GitHub desde la página de cuenta.',
+      )
+    case 'not-member':
+      throw fail(
+        'FORBIDDEN',
+        `Crear equipos es para miembros de la organización ${ctx.github.org} en GitHub.`,
+      )
+  }
 }
 
 function rateLimit(
@@ -440,11 +471,14 @@ export function buildSchema() {
   const CapabilitiesRef = builder.objectRef<{
     grading: boolean
     voice: boolean
+    githubOrg: string | null
   }>('Capabilities')
   CapabilitiesRef.implement({
     fields: (f) => ({
       grading: f.exposeBoolean('grading'),
       voice: f.exposeBoolean('voice'),
+      /** Set when GitHub login is on: the org whose members may create teams. */
+      githubOrg: f.exposeString('githubOrg', { nullable: true }),
     }),
   })
 
@@ -457,6 +491,7 @@ export function buildSchema() {
         resolve: (_root, _args, ctx) => ({
           grading: !!ctx.ai.llm,
           voice: !!ctx.ai.llm && !!ctx.ai.voice,
+          githubOrg: ctx.github?.org ?? null,
         }),
       }),
       me: f.field({
@@ -635,14 +670,17 @@ export function buildSchema() {
           slug: f.arg.string(),
           visibility: f.arg({ type: VisibilityEnum, required: true }),
         },
-        resolve: (_root, args, ctx) =>
-          guard(() =>
-            ctx.workspace.createTeam(need(ctx).id, {
+        resolve: async (_root, args, ctx) => {
+          const viewer = need(ctx)
+          await creatorAccess(ctx, viewer.id)
+          return guard(() =>
+            ctx.workspace.createTeam(viewer.id, {
               name: args.name,
               slug: args.slug,
               visibility: args.visibility,
             }),
-          ),
+          )
+        },
       }),
       updateTeam: f.field({
         type: TeamRef,

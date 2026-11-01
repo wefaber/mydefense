@@ -1,5 +1,5 @@
 import { RECOVERY_COUNT } from '@wefaber/accounts'
-import { expect, test } from 'bun:test'
+import { afterAll, expect, test } from 'bun:test'
 import { createApp } from './app.ts'
 import { openDb } from './db/connection.ts'
 import { runMigrations } from './db/migrate.ts'
@@ -7,6 +7,67 @@ import { buildServices } from './services.ts'
 
 const PASSWORD = 'a long enough passphrase 1'
 const PDF = new TextEncoder().encode('%PDF-1.7\n%fake body')
+const ORG = 'wefaber'
+const GITHUB = {
+  org: ORG,
+  clientId: 'test-client',
+  clientSecret: 'test-secret',
+  publicUrl: 'http://localhost:5190',
+}
+
+/** GitHub as the tests see it. `member: 'error'` makes the membership read fail. */
+const people: Record<string, { id: number; member: boolean | 'error' }> = {
+  alice: { id: 1, member: true },
+  bob: { id: 2, member: false },
+  carol: { id: 3, member: false },
+  dana: { id: 4, member: true },
+  flaky: { id: 5, member: 'error' },
+  eve: { id: 6, member: false },
+}
+
+/**
+ * Stands in for github.com and api.github.com. The code is `code-<login>`, the token `gho_<login>`. Installed for this
+ * file only; any other URL fails loudly.
+ */
+const realFetch = globalThis.fetch
+globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  const req =
+    input instanceof Request ? input : new Request(String(input), init)
+  const url = new URL(req.url)
+  if (url.origin === 'https://github.com') {
+    if (url.pathname !== '/login/oauth/access_token') {
+      return new Response('?', { status: 404 })
+    }
+    const code = new URLSearchParams(await req.text()).get('code') ?? ''
+    const login = code.replace(/^code-/, '')
+    if (!people[login]) {
+      return Response.json({ error: 'bad_verification_code' }, { status: 400 })
+    }
+    return Response.json({ access_token: `gho_${login}`, token_type: 'bearer' })
+  }
+  if (url.origin === 'https://api.github.com') {
+    const login = (req.headers.get('authorization') ?? '').replace(
+      'Bearer gho_',
+      '',
+    )
+    const person = people[login]
+    if (!person) return new Response('{}', { status: 401 })
+    if (url.pathname === '/user') return Response.json({ id: person.id, login })
+    if (url.pathname === `/user/memberships/orgs/${ORG}`) {
+      if (person.member === 'error') {
+        return new Response('boom', { status: 500 })
+      }
+      return person.member
+        ? Response.json({ state: 'active', role: 'member' })
+        : new Response('{}', { status: 404 })
+    }
+  }
+  return new Response('unexpected request', { status: 599 })
+}) as typeof fetch
+
+afterAll(() => {
+  globalThis.fetch = realFetch
+})
 
 function app() {
   const db = openDb(':memory:')
@@ -20,9 +81,13 @@ function app() {
   const server = createApp({
     config: { production: true, distDir: null },
     db,
-    services: buildServices({ filesDir: '', keyFile: undefined }, db, files),
+    services: buildServices(
+      { filesDir: '', keyFile: undefined, github: GITHUB },
+      db,
+      files,
+    ),
   })
-  return { server, saved }
+  return { server, saved, db }
 }
 
 interface Reply {
@@ -30,24 +95,47 @@ interface Reply {
   errors?: { message: string; extensions?: { code?: string } }[]
 }
 
-/** A browser: keeps the session cookie between calls. */
+/** A browser: keeps its cookies between calls. */
 function browser(server: ReturnType<typeof app>['server']) {
-  let cookie = ''
+  const jar = new Map<string, string>()
   let lastSetCookie = ''
   const remember = (res: Response) => {
-    const set = res.headers.getSetCookie()
-    for (const line of set) {
+    for (const line of res.headers.getSetCookie()) {
       lastSetCookie = line
       const [pair = ''] = line.split(';')
-      const [name = '', value = ''] = pair.split('=')
-      if (name === 'md_session')
-        cookie =
-          /expires=Thu, 01 Jan 1970|max-age=0/i.test(line) || !value ? '' : pair
+      const [name = '', ...rest] = pair.split('=')
+      const value = rest.join('=')
+      if (/expires=Thu, 01 Jan 1970|max-age=0/i.test(line) || !value) {
+        jar.delete(name)
+      } else jar.set(name, value)
     }
   }
-  return {
+  const cookieHeader = () =>
+    [...jar].map(([name, value]) => `${name}=${value}`).join('; ')
+  const cookies = (): Record<string, string> =>
+    cookieHeader() ? { cookie: cookieHeader() } : {}
+
+  const self = {
     get setCookie() {
       return lastSetCookie
+    },
+    get session() {
+      return jar.has('md_session')
+    },
+    async get(path: string): Promise<Response> {
+      const res = await server.handle(
+        new Request(`http://localhost${path}`, { headers: cookies() }),
+      )
+      remember(res)
+      return res
+    },
+    /** Starts GitHub sign-in, then comes back with the code GitHub would send. */
+    async githubSignIn(login: string, state?: string): Promise<Response> {
+      const start = await self.get('/auth/github/start')
+      const issued = new URL(start.headers.get('location') ?? '').searchParams
+      return self.get(
+        `/auth/github/callback?code=code-${login}&state=${state ?? issued.get('state')}`,
+      )
     },
     async gql(
       query: string,
@@ -58,7 +146,7 @@ function browser(server: ReturnType<typeof app>['server']) {
           method: 'POST',
           headers: {
             'content-type': 'application/json',
-            ...(cookie ? { cookie } : {}),
+            ...cookies(),
             ...headers,
           },
           body: JSON.stringify({ query }),
@@ -78,18 +166,24 @@ function browser(server: ReturnType<typeof app>['server']) {
       const res = await server.handle(
         new Request(`http://localhost/api/teams/${slug}/materials`, {
           method: 'POST',
-          headers: { ...(cookie ? { cookie } : {}), ...headers },
+          headers: { ...cookies(), ...headers },
           body: form,
         }),
       )
       return { status: res.status, body: (await res.json()) as any }
     },
   }
+  return self
 }
 
 const register = (b: ReturnType<typeof browser>, handle: string) =>
   b.gql(
     `mutation { register(handle: "${handle}", displayName: "${handle}", password: "${PASSWORD}") { user { handle } recoveryCodes } }`,
+  )
+
+const createTeam = (b: ReturnType<typeof browser>, name: string) =>
+  b.gql(
+    `mutation { createTeam(name: "${name}", visibility: public) { id slug myRole } }`,
   )
 
 const code = (r: Reply) => r.errors?.[0]?.extensions?.code
@@ -164,12 +258,156 @@ test('anonymous users cannot write', async () => {
   expect(code(res)).toBe('UNAUTHENTICATED')
 })
 
+test('GitHub sign-in starts at the org-scoped authorization with a state cookie', async () => {
+  const b = browser(app().server)
+  const res = await b.get('/auth/github/start')
+  expect(res.status).toBe(302)
+  const to = new URL(res.headers.get('location') ?? '')
+  expect(`${to.origin}${to.pathname}`).toBe(
+    'https://github.com/login/oauth/authorize',
+  )
+  expect(to.searchParams.get('client_id')).toBe('test-client')
+  expect(to.searchParams.get('scope')).toBe('read:org')
+  expect(to.searchParams.get('redirect_uri')).toBe(
+    'http://localhost:5190/auth/github/callback',
+  )
+  expect(to.searchParams.get('state')).toMatch(/.{16,}/)
+  expect(b.setCookie).toMatch(/md_oauth=/)
+  expect(b.setCookie).toMatch(/HttpOnly/i)
+  expect(b.setCookie).toMatch(/SameSite=Lax/i)
+  expect(b.setCookie).toMatch(/Path=\/auth\/github/)
+})
+
+test('a GitHub member signs in without a password; a GitHub-only account cannot log in with one', async () => {
+  const { server } = app()
+  const b = browser(server)
+  const cb = await b.githubSignIn('alice')
+  expect(cb.headers.get('location')).toBe('/cuenta/equipos')
+  expect(b.setCookie).toMatch(/md_session=/)
+  expect(b.setCookie).toMatch(/HttpOnly/i)
+  expect(b.setCookie).toMatch(/Secure/i)
+  expect((await b.gql('{ me { handle displayName } }')).data?.me).toEqual({
+    handle: 'alice',
+    displayName: 'alice',
+  })
+
+  const pw = await browser(server).gql(
+    `mutation { login(handle: "alice", password: "${PASSWORD}") { handle } }`,
+  )
+  expect(code(pw)).toBe('INVALID_CREDENTIALS')
+})
+
+test('creating a team needs a GitHub sign-in as a member of the org', async () => {
+  const { server } = app()
+  const password = browser(server)
+  await register(password, 'pat')
+  expect(code(await createTeam(password, 'Sin GitHub'))).toBe('FORBIDDEN')
+
+  const outsider = browser(server)
+  await outsider.githubSignIn('bob')
+  const refused = await createTeam(outsider, 'Ajeno')
+  expect(code(refused)).toBe('FORBIDDEN')
+  expect(refused.errors?.[0]?.message).toContain(ORG)
+
+  const member = browser(server)
+  await member.githubSignIn('dana')
+  expect((await createTeam(member, 'Propio')).data?.createTeam).toMatchObject({
+    slug: 'propio',
+    myRole: 'director',
+  })
+})
+
+test('a membership revoked on GitHub stops team creation at the next sign-in', async () => {
+  const { server } = app()
+  const b = browser(server)
+  await b.githubSignIn('dana')
+  expect((await createTeam(b, 'Antes')).data?.createTeam.slug).toBe('antes')
+
+  people.dana!.member = false
+  try {
+    await b.githubSignIn('dana')
+    expect(code(await createTeam(b, 'Despues'))).toBe('FORBIDDEN')
+  } finally {
+    people.dana!.member = true
+  }
+})
+
+test('a GitHub login does not merge with a password account of the same name', async () => {
+  const { server } = app()
+  const password = browser(server)
+  await register(password, 'eve')
+  const github = browser(server)
+  await github.githubSignIn('eve')
+  const handle = (await github.gql('{ me { handle } }')).data?.me.handle
+  expect(handle).toMatch(/^eve-[a-z0-9]{4}$/)
+
+  const again = await browser(server).gql(
+    `mutation { login(handle: "eve", password: "${PASSWORD}") { handle } }`,
+  )
+  expect(again.data?.login.handle).toBe('eve')
+})
+
+test('a failed GitHub check, a forged state or a suspended account sign nobody in', async () => {
+  const { server, db } = app()
+  const flaky = browser(server)
+  const failed = await flaky.githubSignIn('flaky')
+  expect(failed.headers.get('location')).toBe('/cuenta/entrar?error=github')
+  expect(flaky.session).toBe(false)
+
+  const forged = browser(server)
+  await forged.get('/auth/github/start')
+  const bad = await forged.githubSignIn('alice', 'forged-state-value')
+  expect(bad.headers.get('location')).toBe('/cuenta/entrar?error=github')
+  expect(forged.session).toBe(false)
+
+  await browser(server).githubSignIn('carol')
+  db.$client.run("update users set status = 'suspended' where handle = 'carol'")
+  const suspended = await browser(server).githubSignIn('carol')
+  expect(suspended.headers.get('location')).toBe('/cuenta/entrar?error=github')
+})
+
+test('the OAuth token is never stored', async () => {
+  const { server, db } = app()
+  await browser(server).githubSignIn('alice')
+  const tables = db.$client
+    .query<{ name: string }, []>(
+      "select name from sqlite_master where type = 'table'",
+    )
+    .all()
+  for (const { name } of tables) {
+    const dump = JSON.stringify(
+      db.$client.query(`select * from "${name}"`).all(),
+    )
+    expect(dump).not.toContain('gho_')
+  }
+})
+
+test('members of a public team cannot read what only members see, outsiders get NOT_FOUND', async () => {
+  const { server } = app()
+  const alice = browser(server)
+  const carol = browser(server)
+  await alice.githubSignIn('alice')
+  await register(carol, 'carol')
+  await alice.gql(
+    'mutation { createTeam(name: "Abierto", visibility: public) { id } }',
+  )
+  expect(
+    (await carol.gql('{ team(slug: "abierto") { name } }')).data?.team.name,
+  ).toBe('Abierto')
+  expect(
+    code(await carol.gql('{ team(slug: "abierto") { members { handle } } }')),
+  ).toBe('NOT_FOUND')
+  expect(
+    code(await carol.gql('{ team(slug: "abierto") { materials { name } } }')),
+  ).toBe('NOT_FOUND')
+})
+
 test('private teams and their management data stay behind membership', async () => {
   const { server } = app()
   const alice = browser(server)
   const bob = browser(server)
   const anon = browser(server)
-  await register(alice, 'alice')
+  await alice.githubSignIn('alice')
   await register(bob, 'bob')
 
   const created = await alice.gql(
@@ -222,32 +460,12 @@ test('private teams and their management data stay behind membership', async () 
   ).toBe('UNAUTHENTICATED')
 })
 
-test('members of a public team cannot read what only members see, outsiders get NOT_FOUND', async () => {
-  const { server } = app()
-  const alice = browser(server)
-  const carol = browser(server)
-  await register(alice, 'alice')
-  await register(carol, 'carol')
-  await alice.gql(
-    'mutation { createTeam(name: "Abierto", visibility: public) { id } }',
-  )
-  expect(
-    (await carol.gql('{ team(slug: "abierto") { name } }')).data?.team.name,
-  ).toBe('Abierto')
-  expect(
-    code(await carol.gql('{ team(slug: "abierto") { members { handle } } }')),
-  ).toBe('NOT_FOUND')
-  expect(
-    code(await carol.gql('{ team(slug: "abierto") { materials { name } } }')),
-  ).toBe('NOT_FOUND')
-})
-
 test('uploads need a session, membership, a valid file and a same-site origin', async () => {
   const { server, saved } = app()
   const alice = browser(server)
   const bob = browser(server)
   const anon = browser(server)
-  await register(alice, 'alice')
+  await alice.githubSignIn('alice')
   await register(bob, 'bob')
   await alice.gql(
     'mutation { createTeam(name: "Equipo", visibility: public) { id } }',

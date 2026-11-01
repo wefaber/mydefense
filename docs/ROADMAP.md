@@ -69,6 +69,9 @@ invitar · Ask Ether (dock). Approved by Faku before code.
 - [x] Teams, identities, members, invites
 - [x] Material upload (plain HTTP endpoint)
 - [x] Scoped access module + isolation tests
+- [x] GitHub login (OAuth, `read:org`); team creation only for members of the configured org, re-checked every 24 h
+      at sign-in ([ADR 0004](adr/0004-github-login-and-org-gated-teams.md))
+- [ ] Link GitHub to an existing password account while signed in (not automatic: see ADR 0004)
 
 ### F3 · Answer and grade (text + voice) · v0.3.0
 

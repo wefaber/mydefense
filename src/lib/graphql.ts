@@ -12,11 +12,15 @@ export async function gql<T>(
   }
   const body = (await res.json().catch(() => null)) as {
     data?: T
-    errors?: { message: string }[]
+    errors?: { message: string; extensions?: { code?: string } }[]
   } | null
   if (!body) throw new Error(`Respuesta inválida (HTTP ${res.status}).`)
   if (body.errors?.length || !body.data) {
-    throw new Error(body.errors?.[0]?.message ?? 'Respuesta vacía.')
+    const first = body.errors?.[0]
+    // The stable code lets a screen offer the right next step (for instance, signing in with GitHub again).
+    throw Object.assign(new Error(first?.message ?? 'Respuesta vacía.'), {
+      code: first?.extensions?.code,
+    })
   }
   return body.data
 }

@@ -37,13 +37,16 @@ const indexRoute = createRoute({
 const authRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'cuenta/entrar',
-  validateSearch: (s: Record<string, unknown>): { next?: string } => ({
+  validateSearch: (
+    s: Record<string, unknown>,
+  ): { next?: string; error?: 'github' } => ({
     next:
       typeof s.next === 'string' &&
       s.next.startsWith('/') &&
       !s.next.startsWith('//')
         ? s.next
         : undefined,
+    error: s.error === 'github' ? 'github' : undefined,
   }),
   component: AuthPage,
 })
