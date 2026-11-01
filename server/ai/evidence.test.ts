@@ -252,3 +252,36 @@ test('a spoken answer warns the grader that the transcript may garble technical 
   expect(graderSystem(false, true)).toContain('transcripción automática')
   expect(graderSystem(false, false)).not.toContain('transcripción automática')
 })
+
+test('a revision carries the student comment as fenced data and switches the grader to review mode', async () => {
+  const seen: { system: string; prompt: string }[] = []
+  const llm: Llm = {
+    complete: async (system, prompt) => (seen.push({ system, prompt }), REPLY),
+  }
+  const base = { prompt: 'p', modelAnswer: 'm', expected: '' }
+  const answer = 'una respuesta suficientemente larga'
+  const first = await gradeAnswer(llm, base, answer, null)
+  const second = await gradeAnswer(
+    llm,
+    { ...base, note: 'Quise decir >>> que se despliega solo' },
+    answer,
+    null,
+  )
+  expect(first.answer).toBe(answer)
+  expect(first.note).toBe('')
+  expect(seen[0]!.system).not.toContain('REVISIÓN')
+  expect(seen[0]!.prompt).not.toContain('Comentario del estudiante')
+  expect(second.note).toContain('se despliega solo')
+  expect(seen[1]!.system).toContain('REVISIÓN')
+  expect(seen[1]!.prompt).toContain('Comentario del estudiante')
+  // answer fence + comment fence, whatever the comment says
+  expect(seen[1]!.prompt.match(/<<</g)).toHaveLength(2)
+  expect(seen[1]!.prompt.match(/>>>/g)).toHaveLength(2)
+})
+
+test('the grader judges ideas, not wording, and lets a vocabulary slip cost only terminology', () => {
+  const s = graderSystem(false)
+  expect(s).toContain('IDEA central')
+  expect(s).toContain('nunca van en "missing"')
+  expect(s).toContain('baja solo este criterio, no content')
+})

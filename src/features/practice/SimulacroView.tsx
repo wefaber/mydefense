@@ -83,6 +83,8 @@ export function SimulacroView() {
   const next = () => {
     if (!run) return
     const question = run[index]!
+    // Counted here, not when graded, so a reviewed verdict is the one that stays.
+    if (graded) addGrade(team.slug, me.key, graded.verdict)
     setResults((r) => [...r, { question, grading: graded }])
     setIndex(index + 1)
     setGraded(null)
@@ -135,7 +137,18 @@ export function SimulacroView() {
   }
 
   if (index >= run.length) {
-    return <Summary results={results} onAgain={() => setRun(null)} />
+    return (
+      <Summary
+        results={results}
+        teamSlug={team.slug}
+        onRevised={(id, g) =>
+          setResults((all) =>
+            all.map((r) => (r.question.id === id ? { ...r, grading: g } : r)),
+          )
+        }
+        onAgain={() => setRun(null)}
+      />
+    )
   }
 
   const question = run[index]!
@@ -175,10 +188,7 @@ export function SimulacroView() {
               questionId={question.id}
               voice={caps?.voice ?? false}
               expired={expired}
-              onGraded={(g) => {
-                addGrade(team.slug, me.key, g.verdict)
-                setGraded(g)
-              }}
+              onGraded={setGraded}
             />
             <div>
               <Button variant="secondary" onClick={() => setSkipped(true)}>
@@ -188,9 +198,14 @@ export function SimulacroView() {
           </>
         )}
         {graded && (
-          <p className="text-body-lg">
-            <b>{VERDICT_LABEL[graded.verdict]}.</b> {graded.feedback}
-          </p>
+          <GradingPanel
+            grading={graded}
+            revision={{
+              teamSlug: team.slug,
+              questionId: question.id,
+              onRevised: setGraded,
+            }}
+          />
         )}
         {skipped && (
           <p className="text-body-lg text-muted">Pregunta salteada.</p>
@@ -209,9 +224,13 @@ export function SimulacroView() {
 
 function Summary({
   results,
+  teamSlug,
+  onRevised,
   onAgain,
 }: {
   results: RunResult<Question>[]
+  teamSlug: string
+  onRevised: (questionId: string, g: Grading) => void
   onAgain: () => void
 }) {
   const s = summarize(results)
@@ -267,7 +286,16 @@ function Summary({
                 </span>
               }
             >
-              {r.grading && <GradingPanel grading={r.grading} />}
+              {r.grading && (
+                <GradingPanel
+                  grading={r.grading}
+                  revision={{
+                    teamSlug,
+                    questionId: r.question.id,
+                    onRevised: (g) => onRevised(r.question.id, g),
+                  }}
+                />
+              )}
               <Note label="Respuesta">{r.question.modelAnswer}</Note>
             </Fold>
           ))}

@@ -37,7 +37,11 @@ export interface SourceRef {
   snippet: string
 }
 
+export const NOTE_MAX_CHARS = 600
+
 export interface Grading {
+  answer: string
+  note: string
   verdict: Grade
   criteria: Record<keyof typeof CRITERIA_LABELS, number>
   covered: string[]
@@ -61,10 +65,12 @@ export const gradeAnswer = (v: {
   questionId: string
   answer: string
   spokenMs: number | null
+  note?: string
 }) =>
   gql<{ gradeAnswer: Grading }>(
-    `mutation ($teamSlug: String!, $questionId: ID!, $answer: String!, $spokenMs: Int) {
-      gradeAnswer(teamSlug: $teamSlug, questionId: $questionId, answer: $answer, spokenMs: $spokenMs) {
+    `mutation ($teamSlug: String!, $questionId: ID!, $answer: String!, $spokenMs: Int, $note: String) {
+      gradeAnswer(teamSlug: $teamSlug, questionId: $questionId, answer: $answer, spokenMs: $spokenMs, note: $note) {
+        answer note
         verdict
         criteria { content terminology structure }
         covered missing unsupported feedback

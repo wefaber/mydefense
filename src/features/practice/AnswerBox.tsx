@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   CRITERIA_LABELS,
   gradeAnswer,
+  NOTE_MAX_CHARS,
   voiceToken,
   type Grading,
 } from '../../lib/answer'
@@ -249,8 +250,100 @@ function Bullets({ title, items }: { title: string; items: string[] }) {
   )
 }
 
-/** The correction: verdict, the three rubric criteria, what was and was not covered, and pace for spoken answers. */
-export function GradingPanel({ grading }: { grading: Grading }) {
+/** The student explains what they meant and the answer is graded again with that comment. */
+function Revise({
+  teamSlug,
+  questionId,
+  grading,
+  onRevised,
+}: {
+  teamSlug: string
+  questionId: string
+  grading: Grading
+  onRevised: (g: Grading) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [note, setNote] = useState('')
+  const revise = useMutation({
+    mutationFn: () =>
+      gradeAnswer({
+        teamSlug,
+        questionId,
+        answer: grading.answer,
+        spokenMs: null,
+        note,
+      }),
+    // The pace of a spoken answer belongs to the recording, not to the review.
+    onSuccess: (g) => {
+      onRevised({ ...g, delivery: grading.delivery })
+      setOpen(false)
+    },
+  })
+  if (!open)
+    return (
+      <div>
+        <Button
+          variant="secondary"
+          onClick={() => {
+            setNote(grading.note)
+            setOpen(true)
+          }}
+        >
+          {grading.note ? 'Editar mi comentario' : 'No coincido: justificar'}
+        </Button>
+      </div>
+    )
+  return (
+    <div className="flex flex-col gap-2">
+      <label
+        htmlFor="revise-note"
+        className="text-meta font-semibold text-muted"
+      >
+        Explicá qué quisiste decir o por qué tu respuesta es válida
+      </label>
+      <Textarea
+        id="revise-note"
+        rows={3}
+        maxLength={NOTE_MAX_CHARS}
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variant="primary"
+          disabled={revise.isPending || note.trim() === ''}
+          onClick={() => revise.mutate()}
+        >
+          {revise.isPending ? 'Revisando…' : 'Pedir revisión'}
+        </Button>
+        <Button variant="secondary" onClick={() => setOpen(false)}>
+          Cancelar
+        </Button>
+      </div>
+      {revise.error && (
+        <p role="alert" className="text-body-lg text-danger">
+          {revise.error.message}
+        </p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The correction: your answer, the verdict, the three rubric criteria, what was and was not covered, and pace for spoken answers.
+ * With `revision`, you can add a comment that justifies the answer and have it graded again.
+ */
+export function GradingPanel({
+  grading,
+  revision,
+}: {
+  grading: Grading
+  revision?: {
+    teamSlug: string
+    questionId: string
+    onRevised: (g: Grading) => void
+  }
+}) {
   const v = VERDICT[grading.verdict]
   const d = grading.delivery
   return (
@@ -258,6 +351,18 @@ export function GradingPanel({ grading }: { grading: Grading }) {
       aria-label="Corrección"
       className="flex flex-col gap-3 rounded-card bg-surface-2 p-4"
     >
+      <div>
+        <b className="text-meta font-semibold text-muted">Tu respuesta</b>
+        <p className="mt-0.5 whitespace-pre-wrap text-body-lg">
+          {grading.answer}
+        </p>
+        {grading.note && (
+          <p className="mt-1 whitespace-pre-wrap text-body-lg text-muted">
+            <b className="text-meta font-semibold">Tu comentario: </b>
+            {grading.note}
+          </p>
+        )}
+      </div>
       <p className={`text-h3 font-semibold ${v.tone}`}>{v.label}</p>
       {grading.feedback && <p className="text-body-lg">{grading.feedback}</p>}
       <p className="text-meta text-muted">
@@ -300,6 +405,7 @@ export function GradingPanel({ grading }: { grading: Grading }) {
         items={grading.unsupported}
       />
       <Sources items={grading.sources} />
+      {revision && <Revise grading={grading} {...revision} />}
       {d && (
         <p className="text-meta text-muted">
           {d.words} palabras
