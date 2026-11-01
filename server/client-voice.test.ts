@@ -6,6 +6,7 @@ import {
   SttSession,
   parseSttMessage,
   sttUrl,
+  tidy,
   type Socket,
 } from '../src/lib/voice/stt'
 
@@ -108,4 +109,20 @@ test('PCM16 conversion clips and resampling keeps the length ratio', () => {
   expect(resample(new Float32Array(4800).fill(0.5), 48000, 16000)).toHaveLength(
     1600,
   )
+})
+
+test('tidy closes the space Ink leaves before punctuation', () => {
+  expect(tidy('memoria , así que  atacarlo .')).toBe(
+    'memoria, así que atacarlo.',
+  )
+})
+
+test('finalize returns tidied text', async () => {
+  const { sock, stt } = make()
+  sock.onopen?.()
+  await stt.ready
+  sock.say({ type: 'transcript', is_final: true, text: 'hola , mundo' })
+  const done = stt.finalize()
+  sock.say({ type: 'flush_done' })
+  expect(await done).toBe('hola, mundo')
 })

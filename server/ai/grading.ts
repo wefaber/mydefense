@@ -89,8 +89,16 @@ const WITH_SOURCES = [
   'Devolvé SOLO un objeto JSON con las claves: verdict, criteria {content, terminology, structure}, covered, missing, unsupported, feedback, confidence, referenceIssue, argument, cites (números de las fuentes que usaste).',
 ]
 
-export const graderSystem = (grounded: boolean) =>
-  [...BASE_RULES, ...(grounded ? WITH_SOURCES : REFERENCE_ONLY)].join(' ')
+const SPOKEN = [
+  'La respuesta se dijo en voz alta y es una transcripción automática: puede deformar términos técnicos, siglas y nombres propios (por ejemplo "argon2id" oído como "Argond osid"). Si una palabra suena como el término correcto, tomala como ese término y no lo cuentes como error ni como falta de vocabulario.',
+]
+
+export const graderSystem = (grounded: boolean, spoken = false) =>
+  [
+    ...BASE_RULES,
+    ...(spoken ? SPOKEN : []),
+    ...(grounded ? WITH_SOURCES : REFERENCE_ONLY),
+  ].join(' ')
 
 /** Nothing the student wrote, and nothing a source says, may close the markers that fence it. */
 const fence = (t: string) => t.replace(/<<<|>>>/g, '')
@@ -296,7 +304,7 @@ export async function gradeAnswer(
   }
   const sources = q.sources ?? []
   const reply = await llm.complete(
-    graderSystem(sources.length > 0),
+    graderSystem(sources.length > 0, spokenMs !== null),
     buildGradePrompt(q, answer),
     { json: true },
   )

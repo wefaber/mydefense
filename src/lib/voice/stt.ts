@@ -84,6 +84,13 @@ export function parseSttMessage(raw: unknown): SttMessage | null {
   }
 }
 
+/** Ink puts a space before punctuation ("memoria , así"); close it up. */
+export const tidy = (text: string) =>
+  text
+    .replace(/\s+([,.;:!?])/g, '$1')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+
 export interface SttHandlers {
   /** What has been recognized so far. */
   onInterim(text: string): void
@@ -123,7 +130,7 @@ export class SttSession {
   private fail(message: string): void {
     if (this.closed) return
     this.closed = true
-    this.pending?.(this.finalText.trim())
+    this.pending?.(tidy(this.finalText))
     this.pending = null
     this.h.onError(message)
   }
@@ -139,7 +146,7 @@ export class SttSession {
         m.isFinal ? this.finalText : `${this.finalText} ${m.text}`.trim(),
       )
     } else if (m.type === 'flush_done') {
-      this.pending?.(this.finalText.trim())
+      this.pending?.(tidy(this.finalText))
       this.pending = null
     } else if (m.type === 'error') {
       this.fail(m.message)
@@ -153,11 +160,11 @@ export class SttSession {
 
   /** Asks for the text of everything sent and waits for it. Resolves with whatever arrived if the wait times out. */
   finalize(): Promise<string> {
-    if (this.closed) return Promise.resolve(this.finalText.trim())
+    if (this.closed) return Promise.resolve(tidy(this.finalText))
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         this.pending = null
-        resolve(this.finalText.trim())
+        resolve(tidy(this.finalText))
       }, FINALIZE_TIMEOUT_MS)
       this.pending = (text) => {
         clearTimeout(timer)

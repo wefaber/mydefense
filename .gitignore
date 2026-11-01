@@ -24,3 +24,8 @@ dist-ssr
 *.sw?
 data
 .claude/launch.json
+
+# Secrets
+.env
+.env.*
+!.env.example

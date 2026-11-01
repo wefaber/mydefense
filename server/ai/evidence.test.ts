@@ -7,7 +7,12 @@ import {
   type Evidence,
   type Passage,
 } from './evidence.ts'
-import { buildGradePrompt, gradeAnswer, parseGrading } from './grading.ts'
+import {
+  buildGradePrompt,
+  gradeAnswer,
+  graderSystem,
+  parseGrading,
+} from './grading.ts'
 import type { Llm } from './llm.ts'
 
 const P = (
@@ -241,4 +246,9 @@ test('gradeAnswer picks the grounded rules only when there are sources', async (
   expect(systems[0]).toContain('No hay fuentes del Board')
   expect(systems[1]).toContain('referenceIssue')
   expect(systems[1]).not.toContain('No hay fuentes del Board')
+})
+
+test('a spoken answer warns the grader that the transcript may garble technical terms', () => {
+  expect(graderSystem(false, true)).toContain('transcripción automática')
+  expect(graderSystem(false, false)).not.toContain('transcripción automática')
 })
