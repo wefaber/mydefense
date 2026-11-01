@@ -36,6 +36,106 @@ function shuffle<T>(items: T[]): T[] {
   return out
 }
 
+/** The end of a round: the recap when grading is on and something was graded, else the plain tally. */
+function RoundEnd({
+  teamSlug,
+  round,
+  grading,
+  onRevised,
+  onRestart,
+}: {
+  teamSlug: string
+  round: (RunResult<Question> & { verdict: Grade })[]
+  grading: boolean | undefined
+  onRevised: (questionId: string, g: Grading) => void
+  onRestart: () => void
+}) {
+  const count = (g: Grade) => round.filter((a) => a.verdict === g).length
+  const anyGraded = round.some((a) => a.grading)
+  return (
+    <div className="flex flex-col gap-4">
+      {grading && anyGraded ? (
+        <SessionRecap
+          teamSlug={teamSlug}
+          results={round}
+          title="Resultado de la ronda"
+          onRevised={onRevised}
+        />
+      ) : (
+        <p className="text-body-lg">
+          Ronda: {count('complete')} completas, {count('partial')} parciales,{' '}
+          {count('insufficient')} insuficientes.
+        </p>
+      )}
+      <div>
+        <Button size="lg" variant="primary" onClick={onRestart}>
+          Seguir practicando
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/** The correction of an answered question and the student's own verdict on it. */
+function Correction({
+  question,
+  graded,
+  teamSlug,
+  onRevised,
+  onGrade,
+}: {
+  question: Question
+  graded: Grading | null
+  teamSlug: string
+  onRevised: (g: Grading) => void
+  onGrade: (g: Grade) => void
+}) {
+  return (
+    <>
+      {graded && (
+        <GradingPanel
+          grading={graded}
+          revision={{
+            teamSlug,
+            questionId: question.id,
+            onRevised,
+          }}
+        />
+      )}
+      <Note label="Respuesta">{question.modelAnswer}</Note>
+      {asString(question.extra.expected) && (
+        <Note label="Lo que se espera">
+          {asString(question.extra.expected)}
+        </Note>
+      )}
+      <GradeChoices suggested={graded?.verdict} onGrade={onGrade} />
+    </>
+  )
+}
+
+function GradeChoices({
+  suggested,
+  onGrade,
+}: {
+  suggested: Grade | undefined
+  onGrade: (g: Grade) => void
+}) {
+  return (
+    <div role="group" aria-label="Cómo te fue" className="flex flex-wrap gap-2">
+      {GRADES.map(([g, label]) => (
+        <Button
+          key={g}
+          size="lg"
+          variant={g === (suggested ?? 'complete') ? 'primary' : 'secondary'}
+          onClick={() => onGrade(g)}
+        >
+          {suggested === g ? `${label} (sugerida)` : label}
+        </Button>
+      ))}
+    </div>
+  )
+}
+
 export function QuizView() {
   const { team, defense, me } = usePracticeContext()
   const progress = useProgress(team.slug)
@@ -90,42 +190,21 @@ export function QuizView() {
   }
 
   if (ended) {
-    const count = (g: Grade) => round.filter((a) => a.verdict === g).length
-    const anyGraded = round.some((a) => a.grading)
     return (
-      <div className="flex flex-col gap-4">
-        {caps?.grading && anyGraded ? (
-          <SessionRecap
-            teamSlug={team.slug}
-            results={round}
-            title="Resultado de la ronda"
-            onRevised={(id, g) =>
-              setRound((all) =>
-                all.map((a) =>
-                  a.question.id === id ? { ...a, grading: g } : a,
-                ),
-              )
-            }
-          />
-        ) : (
-          <p className="text-body-lg">
-            Ronda: {count('complete')} completas, {count('partial')} parciales,{' '}
-            {count('insufficient')} insuficientes.
-          </p>
-        )}
-        <div>
-          <Button
-            size="lg"
-            variant="primary"
-            onClick={() => {
-              setRound([])
-              setEnded(false)
-            }}
-          >
-            Seguir practicando
-          </Button>
-        </div>
-      </div>
+      <RoundEnd
+        teamSlug={team.slug}
+        round={round}
+        grading={caps?.grading}
+        onRevised={(id, g) =>
+          setRound((all) =>
+            all.map((a) => (a.question.id === id ? { ...a, grading: g } : a)),
+          )
+        }
+        onRestart={() => {
+          setRound([])
+          setEnded(false)
+        }}
+      />
     )
   }
 
@@ -171,44 +250,13 @@ export function QuizView() {
             />
           )}
           {shown ? (
-            <>
-              {graded && (
-                <GradingPanel
-                  grading={graded}
-                  revision={{
-                    teamSlug: team.slug,
-                    questionId: current.id,
-                    onRevised: setGraded,
-                  }}
-                />
-              )}
-              <Note label="Respuesta">{current.modelAnswer}</Note>
-              {asString(current.extra.expected) && (
-                <Note label="Lo que se espera">
-                  {asString(current.extra.expected)}
-                </Note>
-              )}
-              <div
-                role="group"
-                aria-label="Cómo te fue"
-                className="flex flex-wrap gap-2"
-              >
-                {GRADES.map(([g, label]) => (
-                  <Button
-                    key={g}
-                    size="lg"
-                    variant={
-                      g === (graded?.verdict ?? 'complete')
-                        ? 'primary'
-                        : 'secondary'
-                    }
-                    onClick={() => grade(g)}
-                  >
-                    {graded?.verdict === g ? `${label} (sugerida)` : label}
-                  </Button>
-                ))}
-              </div>
-            </>
+            <Correction
+              question={current}
+              graded={graded}
+              teamSlug={team.slug}
+              onRevised={setGraded}
+              onGrade={grade}
+            />
           ) : (
             <div>
               <Button

@@ -146,11 +146,13 @@ test('recapSession makes no call when nothing was graded', async () => {
 })
 
 test('readRecapAnswers accepts what the client sends and round-trips it', () => {
-  expect(readRecapAnswers(JSON.parse(JSON.stringify(answers)))).toEqual(answers)
+  // The client sends JSON text; parse that text, as the server does.
+  const payload = JSON.stringify(answers)
+  expect(readRecapAnswers(JSON.parse(payload))).toEqual(answers)
 })
 
 test('readRecapAnswers refuses a malformed session instead of guessing', () => {
-  const [first] = JSON.parse(JSON.stringify(answers))
+  const first = structuredClone(answers[0]!)
   expect(readRecapAnswers([])).toBeNull()
   expect(readRecapAnswers('no')).toBeNull()
   expect(
@@ -216,7 +218,9 @@ test('a dispute the model cannot answer leaves the caller with null, so the prev
 })
 
 test('readRecap accepts a reading this server wrote and rejects anything else', () => {
-  expect(readRecap(JSON.parse(JSON.stringify(reading)))).toEqual(reading)
+  // The reading comes back from the client as JSON text; parse that text, as the server does.
+  const payload = JSON.stringify(reading)
+  expect(readRecap(JSON.parse(payload))).toEqual(reading)
   expect(readRecap({ ...reading, gaps: 'uno' })).toBeNull()
   expect(readRecap(null)).toBeNull()
 })
