@@ -35,6 +35,7 @@ export function MyTeamsPage() {
   const [visibility, setVisibility] = useState<Visibility>('private')
   const [touched, setTouched] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [reverify, setReverify] = useState(false)
   const [token, setToken] = useState('')
   const [tokenError, setTokenError] = useState<string | null>(null)
 
@@ -44,7 +45,10 @@ export function MyTeamsPage() {
       await client.invalidateQueries({ queryKey: ['my-teams'] })
       await navigate({ to: '/gestion/$team', params: { team: team.slug } })
     },
-    onError: (e) => setError(e.message),
+    onError: (e: Error & { code?: string }) => {
+      setError(e.message)
+      setReverify(e.code === 'REVERIFY')
+    },
   })
 
   const join = useMutation({
@@ -65,6 +69,7 @@ export function MyTeamsPage() {
   const onCreate = (e: FormEvent) => {
     e.preventDefault()
     setError(null)
+    setReverify(false)
     setTouched(true)
     if (nameIssue) return document.getElementById('team-name')?.focus()
     create.mutate()
@@ -160,6 +165,14 @@ export function MyTeamsPage() {
           {error && (
             <p role="alert" className="text-body-lg text-danger">
               {error}
+              {reverify && (
+                <>
+                  {' '}
+                  <a href="/auth/github/start" className="underline">
+                    Entrar con GitHub
+                  </a>
+                </>
+              )}
             </p>
           )}
           <div>

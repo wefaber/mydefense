@@ -8,6 +8,7 @@ import type { Config } from './config.ts'
 import type { Db } from './db/connection.ts'
 import { isReady } from './db/migrate.ts'
 import { AccessError } from './db/workspace.ts'
+import { finishGitHub, startGitHub } from './github-login.ts'
 import { limitsPlugin } from './graphql/limits.ts'
 import { buildSchema, type Context } from './graphql/schema.ts'
 import type { Services } from './services.ts'
@@ -98,6 +99,12 @@ export function createApp({ config, db, services }: Deps) {
       return { status: 'not-ready' }
     })
     .all('/graphql', ({ request }) => yoga.fetch(request), { parse: 'none' })
+    .get('/auth/github/start', ({ request }) =>
+      startGitHub(services, request, config.production),
+    )
+    .get('/auth/github/callback', ({ request }) =>
+      finishGitHub(services, request, config.production),
+    )
     .post(
       '/api/teams/:slug/materials',
       async ({ request, params }) => {
