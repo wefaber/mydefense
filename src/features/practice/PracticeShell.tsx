@@ -54,7 +54,7 @@ export function PracticeShell() {
 
   return (
     <PracticeContext value={{ team, defense, me }}>
-      <div className="sticky top-0 z-10 -mx-4 flex flex-col gap-3 border-b border-border bg-bg/95 px-4 py-3 backdrop-blur">
+      <div className="flex flex-col gap-3">
         <div
           className="flex flex-wrap items-center gap-2"
           role="group"
@@ -66,7 +66,7 @@ export function PracticeShell() {
               to="/$team/$who/$tab"
               params={{ team: team.slug, who: i.key, tab: tab ?? 'puntos' }}
               aria-current={i.key === me.key ? 'true' : undefined}
-              className={`inline-flex h-7 items-center rounded-control px-2.5 font-mono text-meta ${
+              className={`inline-flex h-11 items-center rounded-control px-3 sm:h-8 font-mono text-meta ${
                 i.key === me.key
                   ? 'bg-accent text-on-accent'
                   : 'bg-text/8 text-text hover:bg-text/12'
@@ -93,17 +93,19 @@ export function PracticeShell() {
             style={{ width: `${percent}%` }}
           />
         </div>
+      </div>
+      <div className="sticky top-0 z-10 -mx-4 mt-3 border-b border-border bg-bg/95 px-4 py-2 backdrop-blur">
         <div
           role="tablist"
           aria-label="Secciones"
-          className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1"
+          className="-mx-1 flex gap-2 overflow-x-auto px-1"
         >
           {TABS.map(([id, label]) => (
             <Chip
               key={id}
               role="tab"
               selected={tab === id}
-              className="h-9 px-3"
+              className="h-11 px-3 sm:h-9"
               onClick={() => {
                 void navigate({
                   to: '/$team/$who/$tab',

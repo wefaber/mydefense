@@ -38,10 +38,18 @@ export function PointsView() {
         las preguntas que te pueden hacer. Marcá cuánto lo dominás.
       </Lead>
       <div role="group" aria-label="Qué puntos ver" className="flex gap-2">
-        <Chip selected={scope === 'mine'} onClick={() => setScope('mine')}>
+        <Chip
+          className="h-11 px-3 sm:h-7"
+          selected={scope === 'mine'}
+          onClick={() => setScope('mine')}
+        >
           Los míos ({mine.length})
         </Chip>
-        <Chip selected={scope === 'all'} onClick={() => setScope('all')}>
+        <Chip
+          className="h-11 px-3 sm:h-7"
+          selected={scope === 'all'}
+          onClick={() => setScope('all')}
+        >
           Todos ({defense.points.length})
         </Chip>
       </div>
@@ -100,6 +108,7 @@ export function PointsView() {
                 {RATES.map(([value, label]) => (
                   <Chip
                     key={value}
+                    className="h-11 px-3 sm:h-7"
                     selected={rating === value}
                     onClick={() =>
                       setRating(
