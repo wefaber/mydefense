@@ -34,7 +34,7 @@ project.
 - `Identity`: who presents. Practice picks one; no account needed
 - `Defense` (title, date, criteria) · `Section` · `Point` (owner identity, title, script, talking points, refs, status
   ok | fill | pend, what is missing)
-- `Question` (point?, group own | cross | bank | topic | custom, prompt, model answer, grading spec, refs, status
+- `Question` (point?, group point | bank | topic | custom (own/cross is derived from the point owner), prompt, model answer, grading spec, refs, status
   draft | validated | approved, validator notes)
 - `Resource` (exercise | fact | pending | lesson)
 - `Material` (file, extracted text, chunks) · `Attempt` (question, identity, answer or transcript, grade, feedback)
@@ -51,15 +51,15 @@ Desktop 1440 + mobile 390, teal tokens. Screens: elegí equipo · elegí identid
 explicación) · modo voz · resultados + compartir · crear equipo + subir material · revisión del borrador · miembros +
 invitar · Ask Ether (dock). Approved by Faku before code.
 
-- [ ] Screens drawn and reviewed
+- [~] Skipped by Faku (2026-10-31): F1 goes straight to code; the UI is designed in the browser against `DESIGN.md`
 
 ### F1 · Base + Eternum parity · v0.1.0
 
-- [ ] `CLAUDE.md`, `ARCHITECTURE.md`, `DESIGN.md`, `docs/adr/0001-*`
-- [ ] Scripts `dev` / `check` / `build` / `start` / `test` / `lint`
-- [ ] Server shell: `/health`, `/ready`, `/graphql`, static hosting
-- [ ] SQLite schema, migrations, Eternum seed + count test
-- [ ] SPA: team → identity → Mis puntos / Quiz / Banco / Temas / Ejercicios / Pendientes / Datos, self-grading,
+- [x] `CLAUDE.md`, `ARCHITECTURE.md`, `DESIGN.md`, `docs/adr/0001-*`
+- [x] Scripts `dev` / `check` / `build` / `start` / `test` / `lint`
+- [x] Server shell: `/health`, `/ready`, `/graphql`, static hosting
+- [x] SQLite schema, migrations, Eternum seed + count test
+- [x] SPA: team → identity → Mis puntos / Quiz / Banco / Temas / Ejercicios / Pendientes / Datos, self-grading,
       progress in `localStorage`
 - [ ] Deploy workflow (blue/green, systemd, Nginx); domain to confirm
 

@@ -18,5 +18,8 @@ export default defineConfig({
   },
   server: {
     host: true,
+    port: 5190,
+    proxy: { '/graphql': 'http://127.0.0.1:5191' },
   },
+  build: { outDir: 'dist', emptyOutDir: true },
 })

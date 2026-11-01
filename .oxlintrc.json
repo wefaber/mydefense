@@ -37,5 +37,11 @@
       }
     }
   ],
-  "ignorePatterns": ["dist", "node_modules", "seed", "*.d.ts"]
+  "ignorePatterns": [
+    "dist",
+    "node_modules",
+    "seed",
+    "*.d.ts",
+    "server/db/migrations"
+  ]
 }
