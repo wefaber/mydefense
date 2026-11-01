@@ -10,6 +10,7 @@ import type {
   QuestionGroup,
   QuestionStatus,
   ResourceKind,
+  Role,
   Visibility,
 } from '../../shared/types.ts'
 
@@ -149,4 +150,114 @@ export const resources = sqliteTable(
     position: integer('position').notNull(),
   },
   (t) => [index('resources_team_kind').on(t.teamId, t.kind)],
+)
+
+/* --- F2: accounts, membership, invites, materials -------------------------------------------------------------- */
+
+/** `@wefaber/accounts` AccountUser. No email is asked in MyDefense, so `email_enc` stays empty. */
+export const users = sqliteTable(
+  'users',
+  {
+    id: id(),
+    handle: text('handle').notNull(),
+    displayName: text('display_name').notNull(),
+    passwordHash: text('password_hash'),
+    emailEnc: text('email_enc'),
+    totpSecretEnc: text('totp_secret_enc'),
+    totpEnabled: integer('totp_enabled', { mode: 'boolean' }).notNull(),
+    status: text('status').$type<'active' | 'suspended'>().notNull(),
+    createdAt: createdAt(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (t) => [uniqueIndex('users_handle').on(t.handle)],
+)
+
+/** Only the sha256 of the token is stored. */
+export const sessions = sqliteTable(
+  'sessions',
+  {
+    tokenHash: text('token_hash').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: createdAt(),
+    expiresAt: text('expires_at').notNull(),
+    lastSeen: text('last_seen').notNull(),
+  },
+  (t) => [index('sessions_user').on(t.userId)],
+)
+
+export const recoveryCodes = sqliteTable(
+  'recovery_codes',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    codeHash: text('code_hash').notNull(),
+    usedAt: text('used_at'),
+  },
+  (t) => [uniqueIndex('recovery_codes_user_hash').on(t.userId, t.codeHash)],
+)
+
+export const members = sqliteTable(
+  'members',
+  {
+    id: id(),
+    teamId: text('team_id')
+      .notNull()
+      .references(() => teams.id),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    role: text('role').$type<Role>().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('members_team_user').on(t.teamId, t.userId),
+    index('members_user').on(t.userId),
+  ],
+)
+
+export const invites = sqliteTable(
+  'invites',
+  {
+    id: id(),
+    teamId: text('team_id')
+      .notNull()
+      .references(() => teams.id),
+    tokenHash: text('token_hash').notNull(),
+    role: text('role').$type<Role>().notNull(),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: createdAt(),
+    expiresAt: text('expires_at').notNull(),
+    usedAt: text('used_at'),
+  },
+  (t) => [
+    uniqueIndex('invites_token').on(t.tokenHash),
+    index('invites_team').on(t.teamId),
+  ],
+)
+
+/** An uploaded source file. `extracted_text` is filled by the F3 pipeline. */
+export const materials = sqliteTable(
+  'materials',
+  {
+    id: id(),
+    teamId: text('team_id')
+      .notNull()
+      .references(() => teams.id),
+    name: text('name').notNull(),
+    mime: text('mime').notNull(),
+    size: integer('size').notNull(),
+    /** Path relative to the files directory. */
+    storagePath: text('storage_path').notNull(),
+    extractedText: text('extracted_text'),
+    uploadedBy: text('uploaded_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('materials_team').on(t.teamId)],
 )

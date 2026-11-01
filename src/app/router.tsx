@@ -8,6 +8,10 @@ import {
 import { PracticeShell } from '../features/practice/PracticeShell'
 import { TabView } from '../features/practice/TabView'
 import { isTab } from '../features/practice/tabs'
+import { AuthPage } from '../features/account/AuthPage'
+import { InvitePage, MyTeamsPage } from '../features/account/MyTeamsPage'
+import { MANAGE_AREAS, type ManageArea } from '../features/manage/areas-list'
+import { ManagePage } from '../features/manage/ManagePage'
 import { IdentityPage, TeamsPage } from '../features/teams/TeamPages'
 import { Root } from './Root'
 
@@ -28,6 +32,41 @@ const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
   component: TeamsPage,
+})
+
+const authRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'cuenta/entrar',
+  validateSearch: (s: Record<string, unknown>): { next?: string } => ({
+    next:
+      typeof s.next === 'string' &&
+      s.next.startsWith('/') &&
+      !s.next.startsWith('//')
+        ? s.next
+        : undefined,
+  }),
+  component: AuthPage,
+})
+
+const myTeamsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'cuenta/equipos',
+  component: MyTeamsPage,
+})
+
+const inviteRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'cuenta/invitacion/$token',
+  component: InvitePage,
+})
+
+const manageRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'gestion/$team',
+  validateSearch: (s: Record<string, unknown>): { area?: ManageArea } => ({
+    area: MANAGE_AREAS.find((a) => a === s.area),
+  }),
+  component: ManagePage,
 })
 
 const teamRoute = createRoute({
@@ -71,6 +110,10 @@ const tabRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
+  authRoute,
+  myTeamsRoute,
+  inviteRoute,
+  manageRoute,
   teamRoute,
   practiceRoute.addChildren([practiceIndexRoute, tabRoute]),
 ])

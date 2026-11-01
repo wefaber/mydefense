@@ -19,7 +19,11 @@ export default defineConfig({
   server: {
     host: true,
     port: 5190,
-    proxy: { '/graphql': 'http://127.0.0.1:5191' },
+    // Keep the browser Host: the API compares it with Origin on writes (Nginx does the same with `Host $host`).
+    proxy: {
+      '/graphql': { target: 'http://127.0.0.1:5191', changeOrigin: false },
+      '/api': { target: 'http://127.0.0.1:5191', changeOrigin: false },
+    },
   },
   build: { outDir: 'dist', emptyOutDir: true },
 })

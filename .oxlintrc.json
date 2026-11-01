@@ -24,7 +24,13 @@
         "allow": ["warn", "error"]
       }
     ],
-    "eqeqeq": "error",
+    "eqeqeq": [
+      "error",
+      "always",
+      {
+        "null": "ignore"
+      }
+    ],
     "react/react-in-jsx-scope": "off",
     "import/no-unassigned-import": "off"
   },

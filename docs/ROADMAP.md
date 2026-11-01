@@ -65,10 +65,10 @@ invitar · Ask Ether (dock). Approved by Faku before code.
 
 ### F2 · Accounts + CRUD · v0.2.0
 
-- [ ] Register / login (`@wefaber/accounts`)
-- [ ] Teams, identities, members, invites
-- [ ] Material upload (plain HTTP endpoint)
-- [ ] Scoped access module + isolation tests
+- [x] Register / login (`@wefaber/accounts`)
+- [x] Teams, identities, members, invites
+- [x] Material upload (plain HTTP endpoint)
+- [x] Scoped access module + isolation tests
 
 ### F3 · Authoring pipeline · v0.3.0
 

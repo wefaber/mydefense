@@ -2,16 +2,18 @@ import { expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createApp } from './app.ts'
-import { Catalog } from './db/catalog.ts'
 import { openDb } from './db/connection.ts'
 import { runMigrations } from './db/migrate.ts'
 import { parseEternumData, seedEternum } from './db/seed-eternum.ts'
+import { buildServices } from './services.ts'
 import { MAX_QUERY_CHARS } from './graphql/limits.ts'
 
 const source = readFileSync(
   join(import.meta.dir, '..', 'seed', 'eternum', 'data.js'),
   'utf8',
 )
+
+const noFiles = { write: async () => {}, remove: async () => {} }
 
 function app() {
   const db = openDb(':memory:')
@@ -20,7 +22,7 @@ function app() {
   return createApp({
     config: { production: true, distDir: null },
     db,
-    catalog: new Catalog(db),
+    services: buildServices({ filesDir: '', keyFile: undefined }, db, noFiles),
   })
 }
 

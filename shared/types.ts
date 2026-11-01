@@ -23,3 +23,26 @@ export type Grade = (typeof GRADES)[number]
 export const PAGE_MAX = 100
 export const clampPage = (n: number | null | undefined): number =>
   Math.min(PAGE_MAX, Math.max(1, Math.trunc(n ?? PAGE_MAX)))
+
+export const ROLES = ['director', 'member'] as const
+export type Role = (typeof ROLES)[number]
+
+/** Slugs the SPA and server use for their own routes. A team can never take them. */
+export const RESERVED_SLUGS = [
+  'gestion',
+  'cuenta',
+  'graphql',
+  'api',
+  'assets',
+  'health',
+  'ready',
+  'favicon.svg',
+]
+
+export const MATERIAL_MIMES = [
+  'application/pdf',
+  'text/markdown',
+  'text/plain',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+] as const
+export const MATERIAL_MAX_BYTES = 10 * 1024 * 1024

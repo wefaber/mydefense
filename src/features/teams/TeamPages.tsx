@@ -84,6 +84,28 @@ export function IdentityPage() {
           Elegí tu identidad para ver tus puntos y las preguntas que te tocan.
         </p>
       </header>
+      {team.myRole && (
+        <p className="text-body-lg">
+          Sos{' '}
+          {team.myRole === 'director' ? 'parte de la dirección' : 'integrante'}{' '}
+          de este equipo.{' '}
+          <Link
+            to="/gestion/$team"
+            params={{ team: team.slug }}
+            className="underline"
+          >
+            Gestionar
+          </Link>
+        </p>
+      )}
+      {team.identities.length === 0 && (
+        <Empty>
+          Este equipo todavía no tiene identidades.
+          {team.myRole === 'director'
+            ? ' Agregalas desde Gestionar.'
+            : ' La dirección tiene que agregarlas.'}
+        </Empty>
+      )}
       <ul className="grid gap-3 sm:grid-cols-2">
         {ordered.map((i) => (
           <li key={i.id}>

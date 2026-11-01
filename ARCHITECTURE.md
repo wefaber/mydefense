@@ -27,12 +27,14 @@ mydefense/
 
 ## Ports and env
 
-| Var              | Default             | Notes                                            |
-| ---------------- | ------------------- | ------------------------------------------------ |
-| `MYDEFENSE_PORT` | `5191`              | Loopback only (`127.0.0.1`); Nginx fronts it     |
-| `MYDEFENSE_DB`   | `data/mydefense.db` | Prod: `/home/hermes/data/mydefense/mydefense.db` |
-| `MYDEFENSE_DIST` | `dist`              | Built SPA                                        |
-| `NODE_ENV`       |                     | `production` turns GraphiQL off                  |
+| Var                  | Default             | Notes                                                     |
+| -------------------- | ------------------- | --------------------------------------------------------- |
+| `MYDEFENSE_PORT`     | `5191`              | Loopback only (`127.0.0.1`); Nginx fronts it              |
+| `MYDEFENSE_DB`       | `data/mydefense.db` | Prod: `/home/hermes/data/mydefense/mydefense.db`          |
+| `MYDEFENSE_DIST`     | `dist`              | Built SPA                                                 |
+| `MYDEFENSE_FILES`    | `<db dir>/files`    | Uploaded material (`<teamId>/<id>`), never in the docroot |
+| `MYDEFENSE_KEY_FILE` | unset               | Server key file for accounts; keep outside the repo       |
+| `NODE_ENV`           |                     | `production` turns GraphiQL off, session cookie `Secure`  |
 
 Server env file: `~/deploy/env/mydefense.env`. Never in the repo.
 
@@ -49,12 +51,27 @@ Deviation from the ROADMAP domain model: a point's question has `group = point`,
 "own" or "cross" depends on who is practicing (the point's owner identity), so the client derives it. Groups:
 `point | bank | topic | custom`.
 
+F2 tables: `users`, `sessions`, `recovery_codes`, `members`, `invites`, `materials`. Authenticated reads and writes go
+through `server/db/workspace.ts` (`Workspace`): non-members get `NOT_FOUND` (a private team does not exist for them),
+members who are not directors get `FORBIDDEN` on writes. The last director cannot be removed or demoted. Isolation
+tests: `server/db/workspace.test.ts`, `server/auth.test.ts`.
+
 ## API
 
 `/graphql` only, via Yoga. Limits in `server/graphql/limits.ts`: depth 8, query text 4000 chars, page size clamped to
 1..100, unexpected errors masked, GraphiQL outside production only. Plain HTTP: `/health`, `/ready`, static files.
 
-F1 is read-only (no mutations): the browser keeps progress in `localStorage`.
+Accounts: `@wefaber/accounts` (argon2id, recovery codes, no email). Session cookie `md_session` (HttpOnly, SameSite=Lax,
+Path=/, Secure in production); only a sha256 of the token is stored. Auth, team, identity, invite, member and material
+mutations live in `server/graphql/schema.ts`, rate limited.
+
+Upload: `POST /api/teams/:slug/materials` (multipart `file`). Extension → mime allowlist, magic-byte check, 10 MB, 50 per
+team. No download endpoint yet (F3 reads files server side).
+
+CSRF: non-GET requests need `Origin` equal to `Host` / `x-forwarded-host`, else 403 `CROSS_SITE`; `cors: false`.
+**Nginx must send `proxy_set_header Host $host;`** or every write is rejected.
+
+Practice stays anonymous and read-only: the browser keeps progress in `localStorage`.
 
 ## Privacy
 

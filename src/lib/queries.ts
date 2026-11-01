@@ -54,6 +54,7 @@ export interface Practice {
   id: string
   slug: string
   name: string
+  myRole: 'director' | 'member' | null
   identities: Identity[]
   defense: {
     title: string
@@ -75,7 +76,7 @@ const TEAMS = `{ teams { slug name identities { id name } } }`
 
 const PRACTICE = `query Practice($slug: String!) {
   team(slug: $slug) {
-    id slug name
+    id slug name myRole
     identities { id key name role sectors }
     defense {
       title date
