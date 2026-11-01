@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+data
+.claude/launch.json
+
+# Secrets
+.env
+.env.*
+!.env.example

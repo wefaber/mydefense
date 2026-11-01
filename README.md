@@ -1,35 +1,17 @@
-# React + TypeScript + Vite
+# MyDefense
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Practice a project defense with your team. Pick a team, pick who you are, answer the questions you will be asked.
+No account: progress stays in the browser. First team: Eternum (UTU, 4/11/26).
 
-Currently, two official plugins are available:
+Part of [WeFaber](https://wefaber.net). Plan: [`docs/ROADMAP.md`](docs/ROADMAP.md). Architecture:
+[`ARCHITECTURE.md`](ARCHITECTURE.md). Design: [`DESIGN.md`](DESIGN.md).
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Run
 
-## React Compiler
-
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
-
-Note: This will impact Vite dev & build performances.
-You can also try [the experimental native React Compiler support in plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md#rust-react-compiler) by using `compiler: true` in the plugin options instead of using the Babel plugin.
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+bun install
+bun run dev      # seeds Eternum, API on :5191, web on :5190
+bun run check    # tsc + oxlint + oxfmt + repo checks + tests
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Production: `bun run build && bun run db:seed && bun run start` (needs `MYDEFENSE_DB`, optional `MYDEFENSE_PORT`).

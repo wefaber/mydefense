@@ -1,10 +1,22 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>mydefense</title>
+    <meta
+      name="description"
+      content="Practicá la defensa de tu proyecto con tu equipo. Sin cuenta: tu progreso queda en este navegador."
+    />
+    <title>MyDefense</title>
+    <script>
+      // Paint the theme before first render: follow the system, no flash.
+      try {
+        if (matchMedia('(prefers-color-scheme: dark)').matches) {
+          document.documentElement.dataset.theme = 'dark'
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
