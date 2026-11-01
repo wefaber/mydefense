@@ -25,6 +25,18 @@ export const CRITERIA_LABELS = {
   structure: 'Orden y claridad',
 } as const
 
+export interface SourceRef {
+  n: number
+  title: string
+  path: string
+  url: string | null
+  kind: string
+  code: string | null
+  created: string | null
+  closed: string | null
+  snippet: string
+}
+
 export interface Grading {
   verdict: Grade
   criteria: Record<keyof typeof CRITERIA_LABELS, number>
@@ -32,6 +44,11 @@ export interface Grading {
   missing: string[]
   unsupported: string[]
   feedback: string
+  confidence: 'high' | 'medium' | 'low'
+  referenceIssue: string
+  argument: string
+  sources: SourceRef[]
+  consulted: number
   delivery: {
     words: number
     wpm: number | null
@@ -51,6 +68,8 @@ export const gradeAnswer = (v: {
         verdict
         criteria { content terminology structure }
         covered missing unsupported feedback
+        confidence referenceIssue argument consulted
+        sources { n title path url kind code created closed snippet }
         delivery { words wpm fillers { word count } }
       }
     }`,

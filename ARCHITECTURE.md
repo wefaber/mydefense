@@ -27,16 +27,17 @@ mydefense/
 
 ## Ports and env
 
-| Var                  | Default             | Notes                                                                                        |
-| -------------------- | ------------------- | -------------------------------------------------------------------------------------------- |
-| `MYDEFENSE_PORT`     | `5191`              | Loopback only (`127.0.0.1`); Nginx fronts it                                                 |
-| `MYDEFENSE_DB`       | `data/mydefense.db` | Prod: `/home/hermes/data/mydefense/mydefense.db`                                             |
-| `MYDEFENSE_DIST`     | `dist`              | Built SPA                                                                                    |
-| `MYDEFENSE_FILES`    | `<db dir>/files`    | Uploaded material (`<teamId>/<id>`), never in the docroot                                    |
-| `MYDEFENSE_KEY_FILE` | unset               | Server key file for accounts; keep outside the repo                                          |
-| `DEEPSEEK_API_KEY`   | unset               | Turns grading on (DeepSeek); or `MYDEFENSE_LLM_URL` / `_MODEL` / `_KEY` for another endpoint |
-| `CARTESIA_API_KEY`   | unset               | Turns voice answers on (needs the LLM too); `CARTESIA_VERSION` optional                      |
-| `NODE_ENV`           |                     | `production` turns GraphiQL off, session cookie `Secure`                                     |
+| Var                   | Default             | Notes                                                                                                                                   |
+| --------------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `MYDEFENSE_PORT`      | `5191`              | Loopback only (`127.0.0.1`); Nginx fronts it                                                                                            |
+| `MYDEFENSE_DB`        | `data/mydefense.db` | Prod: `/home/hermes/data/mydefense/mydefense.db`                                                                                        |
+| `MYDEFENSE_DIST`      | `dist`              | Built SPA                                                                                                                               |
+| `MYDEFENSE_FILES`     | `<db dir>/files`    | Uploaded material (`<teamId>/<id>`), never in the docroot                                                                               |
+| `MYDEFENSE_KEY_FILE`  | unset               | Server key file for accounts; keep outside the repo                                                                                     |
+| `DEEPSEEK_API_KEY`    | unset               | Turns grading on (DeepSeek); or `MYDEFENSE_LLM_URL` / `_MODEL` / `_KEY` for another endpoint                                            |
+| `MYDEFENSE_BOARD_URL` | unset               | Board base URL; with `MYDEFENSE_BOARD_TOKEN` turns evidence on. `MYDEFENSE_BOARD_TEAMS` maps `team=board,…` (default `eternum=eternum`) |
+| `CARTESIA_API_KEY`    | unset               | Turns voice answers on (needs the LLM too); `CARTESIA_VERSION` optional                                                                 |
+| `NODE_ENV`            |                     | `production` turns GraphiQL off, session cookie `Secure`                                                                                |
 
 Server env file: `~/deploy/env/mydefense.env`. Never in the repo.
 
@@ -80,6 +81,14 @@ JSON (`grading.ts`): verdict Completa / Parcial / Insuficiente, content / termin
 fence; the reference is the only truth, so claims it does not back land in `unsupported`. Spoken answers also get pace
 (words per minute) and filler words, computed from the transcript. An unusable model reply is an error, never a guess.
 Limits: 30 per 10 min per client, 2000 per day overall. `capabilities { grading voice }` tells the SPA what to show.
+
+Evidence: grading also checks the answer against the project's own documents, not only the stored reference. MyDefense
+asks the Board's API (`server/ai/evidence.ts`, contract in `docs/adr/0002`), never its files: two searches (question
+plus stored answer, and the student's claims), up to 6 passages, numbered and fenced as data with today's date. The
+grader may cite only those numbers (others are dropped) and can say the stored answer is contradicted or short
+(`referenceIssue`), accept a claim a source backs, or, when the evidence does not settle it, answer with
+`confidence: low` and an `argument` with both sides. Without sources confidence never exceeds medium. If the Board is
+unreachable grading falls back to the stored answer and the UI says so.
 
 Voice: Cartesia Ink runs in the browser (`src/lib/voice/`). `voiceToken` mints a 120 s token that only grants `stt`;
 the key stays on the server and the audio goes browser to Cartesia, never through or into our storage. Protocol tests

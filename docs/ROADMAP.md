@@ -80,6 +80,9 @@ Dataminers); the rubric comes from the official "Aspectos a evaluar en defensa".
 - [x] Oral answer: Cartesia Ink in the browser, short-lived token from the server, audio never stored; pace and filler
       words from the transcript
 - [x] Rate limits per client and per day; grading and voice switch themselves off without keys
+- [x] Grading checks answers against Board evidence (cited, flags a flawed stored answer, argues when in doubt); client
+      for the Board API, contract in ADR 0002
+- [ ] Board side of the contract in eternum-board: `/api/v1/evidence/search`, app tokens, document dates, Code Mode ops
 - [ ] Voice verified end to end with a real Cartesia key (built against a fake socket)
 - [ ] Load the ITI sources (`eternum-docs/fuentes/defensa`, the 20-block guide, the role split) so references and cross questions come from them
 - [ ] Nexus and Dataminers teams

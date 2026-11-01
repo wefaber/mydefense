@@ -1,11 +1,13 @@
 import SchemaBuilder from '@pothos/core'
 import { clientKey, sessionCookie, type AccountUser } from '@wefaber/accounts'
 import { GraphQLError } from 'graphql'
+import { gatherEvidence } from '../ai/evidence.ts'
 import {
   GradingError,
   gradeAnswer,
   type Delivery,
   type Grading,
+  type SourceRef,
 } from '../ai/grading.ts'
 import { LlmError } from '../ai/llm.ts'
 import { VoiceError, mintToken, type VoiceToken } from '../ai/voice.ts'
@@ -390,6 +392,20 @@ export function buildSchema() {
       fillers: f.field({ type: [FillerCount], resolve: (d) => d.fillers }),
     }),
   })
+  const SourceRefType = builder.objectRef<SourceRef>('Source')
+  SourceRefType.implement({
+    fields: (f) => ({
+      n: f.exposeInt('n'),
+      title: f.exposeString('title'),
+      path: f.exposeString('path'),
+      url: f.exposeString('url', { nullable: true }),
+      kind: f.exposeString('kind'),
+      code: f.exposeString('code', { nullable: true }),
+      created: f.exposeString('created', { nullable: true }),
+      closed: f.exposeString('closed', { nullable: true }),
+      snippet: f.exposeString('snippet'),
+    }),
+  })
   const GradingRef = builder.objectRef<Grading>('Grading')
   GradingRef.implement({
     fields: (f) => ({
@@ -399,6 +415,11 @@ export function buildSchema() {
       missing: f.exposeStringList('missing'),
       unsupported: f.exposeStringList('unsupported'),
       feedback: f.exposeString('feedback'),
+      confidence: f.exposeString('confidence'),
+      referenceIssue: f.exposeString('referenceIssue'),
+      argument: f.exposeString('argument'),
+      sources: f.field({ type: [SourceRefType], resolve: (g) => g.sources }),
+      consulted: f.exposeInt('consulted'),
       delivery: f.field({
         type: DeliveryRef,
         nullable: true,
@@ -545,9 +566,21 @@ export function buildSchema() {
           const expected =
             typeof q.extra.expected === 'string' ? q.extra.expected : ''
           try {
+            const sources = await gatherEvidence(
+              ctx.ai.evidence,
+              team.slug,
+              q,
+              args.answer,
+            )
             return await gradeAnswer(
               ctx.ai.llm,
-              { prompt: q.prompt, modelAnswer: q.modelAnswer, expected },
+              {
+                prompt: q.prompt,
+                modelAnswer: q.modelAnswer,
+                expected,
+                sources,
+                today: new Date().toISOString().slice(0, 10),
+              },
               args.answer,
               args.spokenMs == null ? null : Math.max(0, args.spokenMs),
             )

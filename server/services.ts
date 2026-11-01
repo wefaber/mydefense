@@ -5,6 +5,7 @@ import {
   type Accounts,
   type Limiter,
 } from '@wefaber/accounts'
+import type { Evidence } from './ai/evidence.ts'
 import type { Llm } from './ai/llm.ts'
 import type { VoiceConfig } from './ai/voice.ts'
 import type { Config } from './config.ts'
@@ -26,6 +27,8 @@ export interface Services {
 export interface Ai {
   llm: Llm | null
   voice: VoiceConfig | null
+  /** The Board's evidence API: lets grading check answers against the project's own documents. */
+  evidence: Evidence | null
 }
 
 /** Wires the domain services over one database. `files` and `ai` are injectable so tests touch neither disk nor network. */
@@ -33,7 +36,7 @@ export function buildServices(
   config: Pick<Config, 'filesDir' | 'keyFile'>,
   db: Db,
   files: FileStore = diskFiles(config.filesDir),
-  ai: Ai = { llm: null, voice: null },
+  ai: Ai = { llm: null, voice: null, evidence: null },
 ): Services {
   return {
     ai,

@@ -167,6 +167,51 @@ const VERDICT: Record<Grading['verdict'], { label: string; tone: string }> = {
   insufficient: { label: 'Insuficiente', tone: 'text-danger' },
 }
 
+const CONFIDENCE = { high: 'alta', medium: 'media', low: 'baja' } as const
+
+const day = (iso: string | null) => (iso ? iso.slice(0, 10) : null)
+
+/** The Board documents the correction cited, numbered as in the text. A link opens the document; otherwise its path. */
+function Sources({ items }: { items: Grading['sources'] }) {
+  if (!items.length) return null
+  return (
+    <div>
+      <b className="text-meta font-semibold text-muted">Fuentes citadas</b>
+      <ol className="mt-1 flex flex-col gap-2">
+        {items.map((src) => (
+          <li key={src.n} className="text-body-lg">
+            <span className="tabular-nums text-muted">[{src.n}]</span>{' '}
+            {src.url ? (
+              <a
+                href={src.url}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="underline"
+              >
+                {src.title}
+              </a>
+            ) : (
+              <b>{src.title}</b>
+            )}
+            <span className="block text-meta text-muted">
+              {[
+                src.code,
+                src.kind === 'issue' ? 'issue' : null,
+                day(src.created) && `creado ${day(src.created)}`,
+                day(src.closed) && `cerrado ${day(src.closed)}`,
+                src.url ? null : src.path,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </span>
+            <span className="block text-meta">{src.snippet}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+}
+
 function Bullets({ title, items }: { title: string; items: string[] }) {
   if (!items.length) return null
   return (
@@ -192,6 +237,27 @@ export function GradingPanel({ grading }: { grading: Grading }) {
     >
       <p className={`text-h3 font-semibold ${v.tone}`}>{v.label}</p>
       {grading.feedback && <p className="text-body-lg">{grading.feedback}</p>}
+      <p className="text-meta text-muted">
+        {grading.consulted === 0
+          ? 'Corregido solo contra la respuesta guardada.'
+          : `Corregido contra la respuesta guardada y ${grading.consulted} documentos del Board. Confianza ${CONFIDENCE[grading.confidence]}.`}
+      </p>
+      {grading.argument && (
+        <div className="rounded-card border border-warning/50 px-3 py-2 text-body-lg">
+          <b className="mb-0.5 block text-meta font-semibold text-warning">
+            No está del todo claro
+          </b>
+          {grading.argument}
+        </div>
+      )}
+      {grading.referenceIssue && (
+        <div className="rounded-card border border-border px-3 py-2 text-body-lg">
+          <b className="mb-0.5 block text-meta font-semibold text-muted">
+            La respuesta guardada podría tener un problema
+          </b>
+          {grading.referenceIssue}
+        </div>
+      )}
       <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-3">
         {(Object.keys(CRITERIA_LABELS) as (keyof typeof CRITERIA_LABELS)[]).map(
           (k) => (
@@ -210,6 +276,7 @@ export function GradingPanel({ grading }: { grading: Grading }) {
         title="Sin respaldo en el material"
         items={grading.unsupported}
       />
+      <Sources items={grading.sources} />
       {d && (
         <p className="text-meta text-muted">
           {d.words} palabras
