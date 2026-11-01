@@ -1,3 +1,4 @@
+import { runInNewContext } from 'node:vm'
 import { eq } from 'drizzle-orm'
 import { ulid } from 'ulid'
 import type { Db } from './connection.ts'
@@ -61,11 +62,13 @@ export interface EternumData {
   CRITERIA: [string, string][]
 }
 
-/** `data.js` declares top-level consts, so evaluate it in a function scope and return them. */
+/** `data.js` declares top-level consts: run it in an empty VM context (no process, no require, time-boxed) and read them back. */
 export function parseEternumData(source: string): EternumData {
   const names =
     'PEOPLE,BLOCKS,POINTS,ASO,TOPICS,EXERCISES,PENDING,FACTS,CRITERIA'
-  return new Function(`${source}\nreturn { ${names} }`)() as EternumData
+  return runInNewContext(`${source}\n;({ ${names} })`, Object.create(null), {
+    timeout: 2000,
+  }) as EternumData
 }
 
 export interface SeedResult {

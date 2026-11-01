@@ -55,6 +55,8 @@ test('with few cross questions the run is just shorter', () => {
 })
 
 const grading = (over: Partial<Grading>): Grading => ({
+  answer: 'una respuesta',
+  note: '',
   verdict: 'partial',
   criteria: { content: 2, terminology: 2, structure: 2 },
   covered: [],

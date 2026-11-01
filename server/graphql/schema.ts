@@ -409,6 +409,8 @@ export function buildSchema() {
   const GradingRef = builder.objectRef<Grading>('Grading')
   GradingRef.implement({
     fields: (f) => ({
+      answer: f.exposeString('answer'),
+      note: f.exposeString('note'),
       verdict: f.field({ type: GradeEnum, resolve: (g) => g.verdict }),
       criteria: f.field({ type: CriteriaScores, resolve: (g) => g.criteria }),
       covered: f.exposeStringList('covered'),
@@ -549,6 +551,8 @@ export function buildSchema() {
           answer: f.arg.string({ required: true }),
           /** Set when the answer was spoken; the transcript is then also measured for pace and fillers. */
           spokenMs: f.arg.int(),
+          /** The student's justification of an earlier correction: asks for a review. */
+          note: f.arg.string(),
         },
         resolve: async (_root, args, ctx) => {
           if (!ctx.ai.llm)
@@ -580,6 +584,7 @@ export function buildSchema() {
                 expected,
                 sources,
                 today: new Date().toISOString().slice(0, 10),
+                note: args.note ?? '',
               },
               args.answer,
               args.spokenMs == null ? null : Math.max(0, args.spokenMs),

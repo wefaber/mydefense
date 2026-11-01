@@ -120,7 +120,16 @@ export function QuizView() {
           )}
           {shown ? (
             <>
-              {graded && <GradingPanel grading={graded} />}
+              {graded && (
+                <GradingPanel
+                  grading={graded}
+                  revision={{
+                    teamSlug: team.slug,
+                    questionId: current.id,
+                    onRevised: setGraded,
+                  }}
+                />
+              )}
               <Note label="Respuesta">{current.modelAnswer}</Note>
               {asString(current.extra.expected) && (
                 <Note label="Lo que se espera">
