@@ -1,6 +1,7 @@
 import { useParams } from '@tanstack/react-router'
 import { PointsView } from './PointsView'
 import { QuizView } from './QuizView'
+import { SimulacroView } from './SimulacroView'
 import {
   BankView,
   ExercisesView,
@@ -13,6 +14,7 @@ import { isTab } from './tabs'
 const VIEWS = {
   puntos: PointsView,
   quiz: QuizView,
+  simulacro: SimulacroView,
   banco: BankView,
   temas: TopicsView,
   ejercicios: ExercisesView,

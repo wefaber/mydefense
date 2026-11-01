@@ -83,6 +83,8 @@ Dataminers); the rubric comes from the official "Aspectos a evaluar en defensa".
 - [x] Grading checks answers against Board evidence (cited, flags a flawed stored answer, argues when in doubt); client
       for the Board API, contract in ADR 0002
 - [ ] Board side of the contract in eternum-board: `/api/v1/evidence/search`, app tokens, document dates, Code Mode ops
+- [x] Simulacro: own points in presentation order, then the tribunal's cross questions, a clock per question that
+      auto-submits at zero, summary with verdicts, criteria averages, pace and fillers
 - [ ] Voice verified end to end with a real Cartesia key (built against a fake socket)
 - [ ] Load the ITI sources (`eternum-docs/fuentes/defensa`, the 20-block guide, the role split) so references and cross questions come from them
 - [ ] Nexus and Dataminers teams
@@ -105,7 +107,7 @@ Dataminers); the rubric comes from the official "Aspectos a evaluar en defensa".
 
 - [x] Cartesia token endpoint and Ink dictation (done in F3)
 - [ ] Sonic reads the question aloud
-- [ ] Mock defense with timer
+- [x] Mock defense with timer (done in F3 as the Simulacro tab)
 
 ### F7 · Ask Ether + Code Mode · v0.7.0
 

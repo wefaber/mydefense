@@ -15,31 +15,44 @@ type Phase = 'idle' | 'connecting' | 'recording' | 'transcribing'
 /**
  * Where the student defends the point: type the answer or record it, then get it graded against the reference.
  * `onGraded` hands the result up so the quiz can reveal the model answer and suggest the self-grade.
+ * `expired` (the mock defense's clock ran out) stops any recording and submits what there is, once.
  */
 export function AnswerBox({
   teamSlug,
   questionId,
   voice,
   onGraded,
+  expired = false,
 }: {
   teamSlug: string
   questionId: string
   voice: boolean
   onGraded: (g: Grading) => void
+  expired?: boolean
 }) {
   const [text, setText] = useState('')
   const [spokenMs, setSpokenMs] = useState<number | null>(null)
   const [phase, setPhase] = useState<Phase>('idle')
   const [voiceError, setVoiceError] = useState<string | null>(null)
   const recorder = useRef<Recorder | null>(null)
+  const submitted = useRef(false)
 
   useEffect(() => () => recorder.current?.cancel(), [])
 
   const grade = useMutation({
-    mutationFn: () =>
-      gradeAnswer({ teamSlug, questionId, answer: text, spokenMs }),
+    mutationFn: (v: { answer: string; spokenMs: number | null }) =>
+      gradeAnswer({ teamSlug, questionId, ...v }),
     onSuccess: onGraded,
   })
+
+  const submit = (answer: string, ms: number | null) => {
+    if (submitted.current) return
+    submitted.current = true
+    grade.mutate(
+      { answer, spokenMs: ms },
+      { onError: () => (submitted.current = false) },
+    )
+  }
 
   const start = async () => {
     setVoiceError(null)
@@ -66,7 +79,7 @@ export function AnswerBox({
     }
   }
 
-  const stop = async () => {
+  const stop = async (thenSubmit = false) => {
     const rec = recorder.current
     if (!rec) return
     setPhase('transcribing')
@@ -76,12 +89,22 @@ export function AnswerBox({
     if (heard) {
       setText(heard)
       setSpokenMs(ms)
+      if (thenSubmit) submit(heard, ms)
     } else {
+      if (thenSubmit) submit('', null)
       setVoiceError(
         'No se escuchó nada. Probá de nuevo, más cerca del micrófono.',
       )
     }
   }
+
+  // The clock ran out: take whatever is in the box, or what the microphone still holds.
+  useEffect(() => {
+    if (!expired || submitted.current) return
+    if (phase === 'recording') void stop(true)
+    else if (phase === 'idle') submit(text, spokenMs)
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [expired, phase])
 
   const busy = phase !== 'idle'
   const label =
@@ -135,7 +158,7 @@ export function AnswerBox({
           variant="primary"
           size="lg"
           disabled={busy || grade.isPending || text.trim() === ''}
-          onClick={() => grade.mutate()}
+          onClick={() => submit(text, spokenMs)}
         >
           {grade.isPending ? 'Corrigiendo…' : 'Corregir'}
         </Button>

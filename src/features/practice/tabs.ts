@@ -1,6 +1,7 @@
 export const TABS = [
   ['puntos', 'Mis puntos'],
   ['quiz', 'Quiz'],
+  ['simulacro', 'Simulacro'],
   ['banco', 'Banco'],
   ['temas', 'Temas'],
   ['ejercicios', 'Ejercicios'],

@@ -90,6 +90,11 @@ grader may cite only those numbers (others are dropped) and can say the stored a
 `confidence: low` and an `argument` with both sides. Without sources confidence never exceeds medium. If the Board is
 unreachable grading falls back to the stored answer and the UI says so.
 
+Simulacro (`src/lib/simulacro.ts`, `SimulacroView`): a mock defense built client-side from the practice payload: one
+question per own point in presentation order, then cross questions, 5 / 8 / 12 questions, 60 / 90 / 120 s each. At zero
+the answer box submits what it holds (stopping a recording first). Model answers wait for the summary. Verdicts also
+feed the local quiz tally; nothing is stored server-side.
+
 Voice: Cartesia Ink runs in the browser (`src/lib/voice/`). `voiceToken` mints a 120 s token that only grants `stt`;
 the key stays on the server and the audio goes browser to Cartesia, never through or into our storage. Protocol tests
 are in `server/client-voice.test.ts` (fake socket); the microphone glue (`recorder.ts`) needs a real key to verify.
