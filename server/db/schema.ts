@@ -240,7 +240,7 @@ export const invites = sqliteTable(
   ],
 )
 
-/** An uploaded source file. `extracted_text` is filled by the F3 pipeline. */
+/** An uploaded source file. `extracted_text` is filled by the F4 pipeline. */
 export const materials = sqliteTable(
   'materials',
   {

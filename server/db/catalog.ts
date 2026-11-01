@@ -88,6 +88,21 @@ export class Catalog {
       .all()
   }
 
+  /** One approved question of the team, or undefined. Used to grade an answer against its reference. */
+  question(teamId: string, questionId: string) {
+    return this.db
+      .select()
+      .from(t.questions)
+      .where(
+        and(
+          eq(t.questions.teamId, teamId),
+          eq(t.questions.id, questionId),
+          eq(t.questions.status, 'approved'),
+        ),
+      )
+      .get()
+  }
+
   resources(teamId: string, kind: ResourceKind | null) {
     const base = eq(t.resources.teamId, teamId)
     const where = kind ? and(base, eq(t.resources.kind, kind)) : base

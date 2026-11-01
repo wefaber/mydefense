@@ -5,7 +5,7 @@ Kind: **product** (public, privacy-first).
 
 ## Shape
 
-One Bun process: Elysia shell + GraphQL (Yoga + Pothos) at `/graphql` + static SPA + in-process jobs (F3+).
+One Bun process: Elysia shell + GraphQL (Yoga + Pothos) at `/graphql` + static SPA + in-process jobs (F4+).
 
 ```
 mydefense/
@@ -27,14 +27,16 @@ mydefense/
 
 ## Ports and env
 
-| Var                  | Default             | Notes                                                     |
-| -------------------- | ------------------- | --------------------------------------------------------- |
-| `MYDEFENSE_PORT`     | `5191`              | Loopback only (`127.0.0.1`); Nginx fronts it              |
-| `MYDEFENSE_DB`       | `data/mydefense.db` | Prod: `/home/hermes/data/mydefense/mydefense.db`          |
-| `MYDEFENSE_DIST`     | `dist`              | Built SPA                                                 |
-| `MYDEFENSE_FILES`    | `<db dir>/files`    | Uploaded material (`<teamId>/<id>`), never in the docroot |
-| `MYDEFENSE_KEY_FILE` | unset               | Server key file for accounts; keep outside the repo       |
-| `NODE_ENV`           |                     | `production` turns GraphiQL off, session cookie `Secure`  |
+| Var                  | Default             | Notes                                                                                        |
+| -------------------- | ------------------- | -------------------------------------------------------------------------------------------- |
+| `MYDEFENSE_PORT`     | `5191`              | Loopback only (`127.0.0.1`); Nginx fronts it                                                 |
+| `MYDEFENSE_DB`       | `data/mydefense.db` | Prod: `/home/hermes/data/mydefense/mydefense.db`                                             |
+| `MYDEFENSE_DIST`     | `dist`              | Built SPA                                                                                    |
+| `MYDEFENSE_FILES`    | `<db dir>/files`    | Uploaded material (`<teamId>/<id>`), never in the docroot                                    |
+| `MYDEFENSE_KEY_FILE` | unset               | Server key file for accounts; keep outside the repo                                          |
+| `DEEPSEEK_API_KEY`   | unset               | Turns grading on (DeepSeek); or `MYDEFENSE_LLM_URL` / `_MODEL` / `_KEY` for another endpoint |
+| `CARTESIA_API_KEY`   | unset               | Turns voice answers on (needs the LLM too); `CARTESIA_VERSION` optional                      |
+| `NODE_ENV`           |                     | `production` turns GraphiQL off, session cookie `Secure`                                     |
 
 Server env file: `~/deploy/env/mydefense.env`. Never in the repo.
 
@@ -66,12 +68,24 @@ Path=/, Secure in production); only a sha256 of the token is stored. Auth, team,
 mutations live in `server/graphql/schema.ts`, rate limited.
 
 Upload: `POST /api/teams/:slug/materials` (multipart `file`). Extension → mime allowlist, magic-byte check, 10 MB, 50 per
-team. No download endpoint yet (F3 reads files server side).
+team. No download endpoint yet (F4 reads files server side).
 
 CSRF: non-GET requests need `Origin` equal to `Host` / `x-forwarded-host`, else 403 `CROSS_SITE`; `cors: false`.
 **Nginx must send `proxy_set_header Host $host;`** or every write is rejected.
 
-Practice stays anonymous and read-only: the browser keeps progress in `localStorage`.
+Answering (`server/ai/`): the student types or records an answer and `gradeAnswer(teamSlug, questionId, answer, spokenMs)`
+grades it against the stored reference with any OpenAI-compatible model (`llm.ts`; DeepSeek by default). The reply is
+JSON (`grading.ts`): verdict Completa / Parcial / Insuficiente, content / terminology / structure 0..4 (the official
+"Aspectos a evaluar"), covered / missing / unsupported, feedback. The answer is fenced as data and cannot close its
+fence; the reference is the only truth, so claims it does not back land in `unsupported`. Spoken answers also get pace
+(words per minute) and filler words, computed from the transcript. An unusable model reply is an error, never a guess.
+Limits: 30 per 10 min per client, 2000 per day overall. `capabilities { grading voice }` tells the SPA what to show.
+
+Voice: Cartesia Ink runs in the browser (`src/lib/voice/`). `voiceToken` mints a 120 s token that only grants `stt`;
+the key stays on the server and the audio goes browser to Cartesia, never through or into our storage. Protocol tests
+are in `server/client-voice.test.ts` (fake socket); the microphone glue (`recorder.ts`) needs a real key to verify.
+
+Practice itself stays anonymous: the browser keeps progress in `localStorage`; nothing about an answer is stored.
 
 ## Privacy
 

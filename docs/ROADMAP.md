@@ -70,7 +70,21 @@ invitar · Ask Ether (dock). Approved by Faku before code.
 - [x] Material upload (plain HTTP endpoint)
 - [x] Scoped access module + isolation tests
 
-### F3 · Authoring pipeline · v0.3.0
+### F3 · Answer and grade (text + voice) · v0.3.0
+
+The point of the product: the student defends the answer instead of reading it. ITI teams only for now (Eternum, Nexus,
+Dataminers); the rubric comes from the official "Aspectos a evaluar en defensa".
+
+- [x] Written answer graded by an LLM against the stored reference (verdict + content / terminology / structure 0..4,
+      covered / missing / unsupported); the answer is fenced as data
+- [x] Oral answer: Cartesia Ink in the browser, short-lived token from the server, audio never stored; pace and filler
+      words from the transcript
+- [x] Rate limits per client and per day; grading and voice switch themselves off without keys
+- [ ] Voice verified end to end with a real Cartesia key (built against a fake socket)
+- [ ] Load the ITI sources (`eternum-docs/fuentes/defensa`, the 20-block guide, the role split) so references and cross questions come from them
+- [ ] Nexus and Dataminers teams
+
+### F4 · Authoring pipeline · v0.4.0
 
 - [ ] Text extraction (PDF, MD, DOCX, TXT) and chunking
 - [ ] Generate points and questions (`deep` profile)
@@ -78,20 +92,19 @@ invitar · Ask Ether (dock). Approved by Faku before code.
 - [ ] Draft review screen; director approves
 - [ ] Material is treated as data, never as instructions
 
-### F4 · Grading, explanations, gen UI, sharing · v0.4.0
+### F5 · Explanations, gen UI, sharing · v0.5.0
 
 - [ ] OpenUI spike on Vite + Tailwind v4 (fallback: fenced-block gen UI)
-- [ ] LLM rubric grading of written answers
 - [ ] "Explicar error" rendered as generative UI
 - [ ] Share links for results
 
-### F5 · Voice mode · v0.5.0
+### F6 · Voice mode · v0.6.0
 
-- [ ] Cartesia token endpoint and voice session (lifted from eternum-board)
-- [ ] Sonic reads the question, Ink transcribes the oral answer, same grading path
+- [x] Cartesia token endpoint and Ink dictation (done in F3)
+- [ ] Sonic reads the question aloud
 - [ ] Mock defense with timer
 
-### F6 · Ask Ether + Code Mode · v0.6.0
+### F7 · Ask Ether + Code Mode · v0.7.0
 
 - [ ] Ask Ether lifted from eternum-board, retrieval scoped to the team's approved material and questions
 - [ ] Validate a question or answer; "¿la documentación cubre X?"

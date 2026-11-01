@@ -2,12 +2,22 @@ import SchemaBuilder from '@pothos/core'
 import { clientKey, sessionCookie, type AccountUser } from '@wefaber/accounts'
 import { GraphQLError } from 'graphql'
 import {
+  GradingError,
+  gradeAnswer,
+  type Delivery,
+  type Grading,
+} from '../ai/grading.ts'
+import { LlmError } from '../ai/llm.ts'
+import { VoiceError, mintToken, type VoiceToken } from '../ai/voice.ts'
+import {
+  GRADES,
   POINT_STATUSES,
   QUESTION_GROUPS,
   RESOURCE_KINDS,
   ROLES,
   VISIBILITIES,
   clampPage,
+  type Grade,
   type PointStatus,
   type QuestionGroup,
   type ResourceKind,
@@ -349,10 +359,83 @@ export function buildSchema() {
     }),
   })
 
+  /* --- Answering: grading and voice ----------------------------------------------------------------------- */
+
+  const GradeEnum = builder.enumType('Grade', {
+    values: GRADES as readonly Grade[],
+  })
+  const CriteriaScores =
+    builder.objectRef<Grading['criteria']>('CriteriaScores')
+  CriteriaScores.implement({
+    fields: (f) => ({
+      content: f.exposeInt('content'),
+      terminology: f.exposeInt('terminology'),
+      structure: f.exposeInt('structure'),
+    }),
+  })
+  const FillerCount = builder.objectRef<{ word: string; count: number }>(
+    'FillerCount',
+  )
+  FillerCount.implement({
+    fields: (f) => ({
+      word: f.exposeString('word'),
+      count: f.exposeInt('count'),
+    }),
+  })
+  const DeliveryRef = builder.objectRef<Delivery>('Delivery')
+  DeliveryRef.implement({
+    fields: (f) => ({
+      words: f.exposeInt('words'),
+      wpm: f.exposeInt('wpm', { nullable: true }),
+      fillers: f.field({ type: [FillerCount], resolve: (d) => d.fillers }),
+    }),
+  })
+  const GradingRef = builder.objectRef<Grading>('Grading')
+  GradingRef.implement({
+    fields: (f) => ({
+      verdict: f.field({ type: GradeEnum, resolve: (g) => g.verdict }),
+      criteria: f.field({ type: CriteriaScores, resolve: (g) => g.criteria }),
+      covered: f.exposeStringList('covered'),
+      missing: f.exposeStringList('missing'),
+      unsupported: f.exposeStringList('unsupported'),
+      feedback: f.exposeString('feedback'),
+      delivery: f.field({
+        type: DeliveryRef,
+        nullable: true,
+        resolve: (g) => g.delivery,
+      }),
+    }),
+  })
+  const VoiceTokenRef = builder.objectRef<VoiceToken>('VoiceToken')
+  VoiceTokenRef.implement({
+    fields: (f) => ({
+      token: f.exposeString('token'),
+      expiresIn: f.exposeInt('expiresIn'),
+      version: f.exposeString('version'),
+    }),
+  })
+  const CapabilitiesRef = builder.objectRef<{
+    grading: boolean
+    voice: boolean
+  }>('Capabilities')
+  CapabilitiesRef.implement({
+    fields: (f) => ({
+      grading: f.exposeBoolean('grading'),
+      voice: f.exposeBoolean('voice'),
+    }),
+  })
+
   /* --- Queries -------------------------------------------------------------------------------------------- */
 
   builder.queryType({
     fields: (f) => ({
+      capabilities: f.field({
+        type: CapabilitiesRef,
+        resolve: (_root, _args, ctx) => ({
+          grading: !!ctx.ai.llm,
+          voice: !!ctx.ai.llm && !!ctx.ai.voice,
+        }),
+      }),
       me: f.field({
         type: UserRef,
         nullable: true,
@@ -435,6 +518,63 @@ export function buildSchema() {
           if (out.kind === 'suspended')
             throw fail('FORBIDDEN', 'Esta cuenta está suspendida.')
           throw fail('INVALID_CREDENTIALS', 'Usuario o contraseña incorrectos.')
+        },
+      }),
+      gradeAnswer: f.field({
+        type: GradingRef,
+        args: {
+          teamSlug: f.arg.string({ required: true }),
+          questionId: f.arg.id({ required: true }),
+          answer: f.arg.string({ required: true }),
+          /** Set when the answer was spoken; the transcript is then also measured for pace and fillers. */
+          spokenMs: f.arg.int(),
+        },
+        resolve: async (_root, args, ctx) => {
+          if (!ctx.ai.llm)
+            throw fail('UNAVAILABLE', 'La corrección no está disponible.')
+          const ip = clientKey(ctx.request, null)
+          rateLimit(ctx, `grade:ip:${ip}`, 30, 600_000)
+          rateLimit(ctx, 'grade:all', 2000, 86_400_000)
+          const team = ctx.workspace.visibleTeamBySlug(
+            args.teamSlug,
+            ctx.viewer?.id ?? null,
+          )
+          const q =
+            team && ctx.catalog.question(team.id, String(args.questionId))
+          if (!q) throw fail('NOT_FOUND', 'No encontramos esa pregunta.')
+          const expected =
+            typeof q.extra.expected === 'string' ? q.extra.expected : ''
+          try {
+            return await gradeAnswer(
+              ctx.ai.llm,
+              { prompt: q.prompt, modelAnswer: q.modelAnswer, expected },
+              args.answer,
+              args.spokenMs == null ? null : Math.max(0, args.spokenMs),
+            )
+          } catch (e) {
+            if (e instanceof LlmError || e instanceof GradingError)
+              throw fail('UNAVAILABLE', e.message)
+            throw e
+          }
+        },
+      }),
+      voiceToken: f.field({
+        type: VoiceTokenRef,
+        resolve: async (_root, _args, ctx) => {
+          if (!ctx.ai.llm || !ctx.ai.voice)
+            throw fail('UNAVAILABLE', 'La voz no está disponible.')
+          rateLimit(
+            ctx,
+            `voice:ip:${clientKey(ctx.request, null)}`,
+            40,
+            600_000,
+          )
+          try {
+            return await mintToken(ctx.ai.voice)
+          } catch (e) {
+            if (e instanceof VoiceError) throw fail('UNAVAILABLE', e.message)
+            throw e
+          }
         },
       }),
       logout: f.boolean({
