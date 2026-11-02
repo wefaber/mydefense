@@ -3,7 +3,7 @@ import {
   type RecapAnswer,
   type RecapGrading,
 } from '../../shared/types.ts'
-import { summarize } from '../../src/lib/simulacro.ts'
+import { summarize } from '../../shared/simulacro.ts'
 import type { Llm } from './llm.ts'
 
 export interface Recap {
