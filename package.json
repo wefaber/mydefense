@@ -14,7 +14,7 @@
     "lint": "oxlint",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "typecheck": "bun check",
+    "typecheck": "tsc -b",
     "check:repo": "bun run scripts/check-repo.ts",
     "verify": "bun run typecheck && bun run lint && bun run format:check && bun run check:repo && bun run test",
     "db:generate": "drizzle-kit generate",

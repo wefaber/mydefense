@@ -5,4 +5,4 @@ pre-push:
       glob: '*.{ts,tsx,js,jsx}'
       run: bunx oxlint {push_files}
     typecheck:
-      run: bun check
+      run: bun run typecheck
