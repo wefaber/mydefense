@@ -11,7 +11,7 @@ Part of [WeFaber](https://wefaber.net). Plan: [`docs/ROADMAP.md`](docs/ROADMAP.m
 ```bash
 bun install
 bun run dev      # seeds Eternum, API on :5191, web on :5190
-bun run check    # tsc + oxlint + oxfmt + repo checks + tests
+bun run verify    # tsc + oxlint + oxfmt + repo checks + tests
 ```
 
 Production: `bun run build && bun run db:seed && bun run start` (needs `MYDEFENSE_DB`, optional `MYDEFENSE_PORT`).
