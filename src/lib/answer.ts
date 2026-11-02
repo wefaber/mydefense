@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import type { Grade } from '../../shared/types'
+import type { Grade, RecapAnswer } from '../../shared/types'
 import { gql } from './graphql'
 
 export interface Capabilities {
@@ -81,6 +81,30 @@ export const gradeAnswer = (v: {
     }`,
     v,
   ).then((d) => d.gradeAnswer)
+
+export interface Recap {
+  analysis: string
+  strengths: string[]
+  gaps: string[]
+  conclusion: string
+}
+
+/**
+ * The reasoned reading of a finished session. Null when the model could not give one: show the numbers alone.
+ * With `previous` and `dispute`, the model rereads the session against the student's objection to that reading.
+ */
+export const recapSession = (v: {
+  teamSlug: string
+  answers: RecapAnswer[]
+  previous?: Recap
+  dispute?: string
+}) =>
+  gql<{ recapSession: Recap | null }>(
+    `mutation ($teamSlug: String!, $answers: JSON!, $previous: JSON, $dispute: String) {
+      recapSession(teamSlug: $teamSlug, answers: $answers, previous: $previous, dispute: $dispute) { analysis strengths gaps conclusion }
+    }`,
+    v,
+  ).then((d) => d.recapSession)
 
 export const voiceToken = () =>
   gql<{ voiceToken: { token: string; version: string } }>(

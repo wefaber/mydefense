@@ -10,6 +10,13 @@ import {
   type SourceRef,
 } from '../ai/grading.ts'
 import { LlmError } from '../ai/llm.ts'
+import {
+  readDispute,
+  readRecap,
+  readRecapAnswers,
+  recapSession,
+  type Recap,
+} from '../ai/recap.ts'
 import { VoiceError, mintToken, type VoiceToken } from '../ai/voice.ts'
 import {
   GRADES,
@@ -460,6 +467,15 @@ export function buildSchema() {
       }),
     }),
   })
+  const RecapRef = builder.objectRef<Recap>('Recap')
+  RecapRef.implement({
+    fields: (f) => ({
+      analysis: f.exposeString('analysis'),
+      strengths: f.exposeStringList('strengths'),
+      gaps: f.exposeStringList('gaps'),
+      conclusion: f.exposeString('conclusion'),
+    }),
+  })
   const VoiceTokenRef = builder.objectRef<VoiceToken>('VoiceToken')
   VoiceTokenRef.implement({
     fields: (f) => ({
@@ -629,6 +645,45 @@ export function buildSchema() {
               throw fail('UNAVAILABLE', e.message)
             throw e
           }
+        },
+      }),
+      recapSession: f.field({
+        type: RecapRef,
+        nullable: true,
+        args: {
+          teamSlug: f.arg.string({ required: true }),
+          /** The session's answers as the client holds them: verdicts and criteria, never the student's wording. */
+          answers: f.arg({ type: 'JSON', required: true }),
+          /** A dispute: the reading the student is answering, and what they say is wrong with it. Both or neither. */
+          previous: f.arg({ type: 'JSON' }),
+          dispute: f.arg.string(),
+        },
+        resolve: async (_root, args, ctx) => {
+          if (!ctx.ai.llm)
+            throw fail('UNAVAILABLE', 'La corrección no está disponible.')
+          // Shares the grading budget: a recap is one more model call.
+          rateLimit(
+            ctx,
+            `grade:ip:${clientKey(ctx.request, null)}`,
+            30,
+            600_000,
+          )
+          rateLimit(ctx, 'grade:all', 2000, 86_400_000)
+          const team = ctx.workspace.visibleTeamBySlug(
+            args.teamSlug,
+            ctx.viewer?.id ?? null,
+          )
+          if (!team) throw fail('NOT_FOUND', 'No encontramos ese equipo.')
+          const answers = readRecapAnswers(args.answers)
+          if (!answers)
+            throw fail('INVALID', 'El resumen de la sesión no es válido.')
+          if (args.previous == null && args.dispute == null)
+            return recapSession(ctx.ai.llm, answers)
+          const previous = readRecap(args.previous)
+          const dispute = readDispute(args.dispute)
+          if (!previous || !dispute)
+            throw fail('INVALID', 'La revisión de la lectura no es válida.')
+          return recapSession(ctx.ai.llm, answers, { previous, dispute })
         },
       }),
       voiceToken: f.field({

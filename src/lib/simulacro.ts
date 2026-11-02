@@ -1,4 +1,4 @@
-import type { Grade } from '../../shared/types'
+import type { Grade, RecapAnswer, RecapGrading } from '../../shared/types'
 import type { Grading } from './answer'
 
 /** Just what a run needs from a question and a point, so it stays testable without the whole practice payload. */
@@ -85,7 +85,15 @@ const avg = (xs: number[]) =>
     ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10
     : 0
 
-export function summarize(results: RunResult[]): RunSummary {
+/** The part of a grading the numbers read. */
+export type SummaryGrade = Pick<
+  RecapGrading,
+  'verdict' | 'criteria' | 'delivery'
+>
+
+export function summarize<R extends { grading: SummaryGrade | null }>(
+  results: R[],
+): RunSummary {
   const graded = results.flatMap((r) => (r.grading ? [r.grading] : []))
   const byVerdict: Record<Grade, number> = {
     complete: 0,
@@ -111,4 +119,24 @@ export function summarize(results: RunResult[]): RunSummary {
       0,
     ),
   }
+}
+
+/** What the session recap sends the model per answer: the verdict and what it hung on. The student's wording stays here. */
+export function recapAnswers(results: RunResult[]): RecapAnswer[] {
+  return results.map((r) => ({
+    question: r.question.prompt,
+    grading: r.grading && {
+      verdict: r.grading.verdict,
+      criteria: r.grading.criteria,
+      covered: r.grading.covered,
+      missing: r.grading.missing,
+      unsupported: r.grading.unsupported,
+      referenceIssue: r.grading.referenceIssue,
+      argument: r.grading.argument,
+      delivery: r.grading.delivery && {
+        wpm: r.grading.delivery.wpm,
+        fillers: r.grading.delivery.fillers,
+      },
+    },
+  }))
 }

@@ -29,3 +29,6 @@ data
 .env
 .env.*
 !.env.example
+
+# Local agent worktrees and session config
+.claude/

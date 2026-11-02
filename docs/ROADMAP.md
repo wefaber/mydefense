@@ -92,6 +92,8 @@ Dataminers); the rubric comes from the official "Aspectos a evaluar en defensa".
   came back right except a garbled technical term, which the grader now tolerates for spoken answers). Still to
   check by hand: the browser microphone path (`src/lib/voice/recorder.ts`)
 - [ ] Load the ITI sources (`eternum-docs/fuentes/defensa`, the 20-block guide, the role split) so references and cross questions come from them
+- [ ] Recap at the end of a quiz or simulacro: a reasoned analysis of every answer (verdicts, criteria, covered and
+      missing, pace, fillers) with data and a valid conclusion; `deepseek-flash` with thinking at high
 - [ ] Nexus and Dataminers teams
 
 ### F4 · Authoring pipeline · v0.4.0
