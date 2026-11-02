@@ -45,7 +45,9 @@ preflight() { # slot
   [[ -r $ENV_FILE ]] || miss+=("3. env file missing or unreadable: $ENV_FILE")
   [[ -f $UNIT ]] || miss+=("4. systemd unit not installed: $UNIT (then: sudo systemctl daemon-reload)")
   [[ -f $SNIPPET ]] || miss+=("5. nginx snippet missing: $SNIPPET (initial: set \$mydefense_port 5191;)")
-  grep -rqs mydefense-active.conf /etc/nginx/sites-enabled/ || miss+=("5. no enabled nginx vhost includes mydefense-active.conf (deploy/nginx/defense.eternum.lat.conf)")
+  # -R, not -r: sites-enabled/ entries are symlinks into sites-available, and grep -r does not follow a
+  # symlink it meets while recursing. With -r this check fails on every vhost installed the house way.
+  grep -Rqs mydefense-active.conf /etc/nginx/sites-enabled/ || miss+=("5. no enabled nginx vhost includes mydefense-active.conf (deploy/nginx/defense.eternum.lat.conf)")
   local cmds=(
     "/usr/bin/systemctl start mydefense@$slot" "/usr/bin/systemctl stop mydefense@$slot"
     "/usr/bin/systemctl status mydefense@$slot" "/usr/bin/systemctl reload nginx"
