@@ -8,9 +8,12 @@ import type { Config } from './config.ts'
 import type { Db } from './db/connection.ts'
 import { isReady } from './db/migrate.ts'
 import { AccessError } from './db/workspace.ts'
+import { teamAccess } from './github.ts'
 import { finishGitHub, startGitHub } from './github-login.ts'
 import { limitsPlugin } from './graphql/limits.ts'
 import { buildSchema, type Context } from './graphql/schema.ts'
+import { syncRepo } from './knowledge.ts'
+import { RepoImportError } from './repo-import.ts'
 import type { Services } from './services.ts'
 import { SESSION_COOKIE, readSessionToken } from './session.ts'
 
@@ -22,6 +25,10 @@ export interface Deps {
 
 const error = (status: number, code: string, message: string) =>
   Response.json({ error: { code, message } }, { status })
+
+const text = (v: unknown) => (typeof v === 'string' ? v : undefined)
+
+const IMPORT_LIMIT = { max: 10, windowMs: 600_000 }
 
 const STATUS: Record<AccessError['code'], number> = {
   NOT_FOUND: 404,
@@ -133,6 +140,81 @@ export function createApp({ config, db, services }: Deps) {
         } catch (e) {
           if (e instanceof AccessError) {
             return error(STATUS[e.code], e.code, e.message)
+          }
+          throw e
+        }
+      },
+      { parse: 'none' },
+    )
+    .post(
+      '/api/teams/:slug/materials/import',
+      async ({ request, params }) => {
+        const { accounts, workspace, repoImport, github, githubLinks } =
+          services
+        const viewer = await accounts.sessionUser(readSessionToken(request))
+        if (!viewer) {
+          return error(401, 'UNAUTHENTICATED', 'Ingresá para importar.')
+        }
+        if (!repoImport || !github) {
+          return error(
+            503,
+            'UNAVAILABLE',
+            'La importación desde GitHub no está activa en este servidor.',
+          )
+        }
+        // The token reads private repos of the org: only fresh members of that org may spend it.
+        const link = await githubLinks.findByUser(viewer.id)
+        if (teamAccess(link, github.org, new Date()) !== 'ok') {
+          return error(
+            403,
+            'FORBIDDEN',
+            `Importar es para miembros de la organización ${github.org}: entrá con GitHub para confirmarlo.`,
+          )
+        }
+        if (!services.limiter.take(`import:${viewer.id}`, IMPORT_LIMIT).ok) {
+          return error(
+            429,
+            'RATE_LIMITED',
+            'Demasiados intentos. Probá de nuevo en un rato.',
+          )
+        }
+        const team = workspace.visibleTeamBySlug(params.slug, viewer.id)
+        if (!team) return error(404, 'NOT_FOUND', 'No encontramos ese equipo.')
+        let spec: { repo?: unknown; path?: unknown; ref?: unknown }
+        try {
+          spec = await request.json()
+        } catch {
+          return error(400, 'INVALID', 'Pedido mal formado.')
+        }
+        if (!text(spec?.repo)?.trim()) {
+          return error(400, 'INVALID', 'Falta el repo.')
+        }
+        try {
+          const result = await syncRepo(
+            {
+              knowledge: services.knowledge,
+              importer: repoImport,
+              embedder: services.ai.embedder ?? null,
+            },
+            viewer.id,
+            team.id,
+            {
+              repo: text(spec.repo)!,
+              path: text(spec.path),
+              ref: text(spec.ref),
+            },
+          )
+          return Response.json({ import: result }, { status: 201 })
+        } catch (e) {
+          if (e instanceof AccessError) {
+            return error(STATUS[e.code], e.code, e.message)
+          }
+          if (e instanceof RepoImportError) {
+            return error(
+              e.status,
+              e.status === 502 ? 'UPSTREAM' : 'INVALID',
+              e.message,
+            )
           }
           throw e
         }
