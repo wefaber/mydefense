@@ -119,4 +119,6 @@ Practice stores nothing server-side. Progress (ratings, quiz tallies, last ident
 ## Delivery
 
 Per house: GitOps on the WeFaber runner, blue/green (`mydefense@blue` / `@green`, ports 5191 / 5192), `/ready` on the
-slot then on the real domain. Domain still to confirm with Faku. Workflow lands once the repo exists on GitHub.
+slot then on the real domain, `https://defense.eternum.lat`. The GitHub OAuth callback is `https://defense.eternum.lat/auth/github/callback` (`server/app.ts`).
+Workflow: `.github/workflows/deploy.yml`; script, systemd unit, Nginx vhost and the one-time VPS setup are in
+[`deploy/`](deploy/README.md).
