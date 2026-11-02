@@ -1,6 +1,14 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, Chip, Field } from '@wefaber/ui'
-import { Copy, Trash2, Upload } from 'lucide-react'
+import {
+  Copy,
+  GitBranch,
+  RefreshCw,
+  Search,
+  Sparkles,
+  Trash2,
+  Upload,
+} from 'lucide-react'
 import { useRef, useState, type FormEvent } from 'react'
 import type { Role, Visibility } from '../../../shared/types'
 import { FormField } from '../../components/FormField'
@@ -9,9 +17,15 @@ import {
   addIdentity,
   createInvite,
   deleteMaterial,
+  deleteSource,
+  proposeIdentities,
+  type RoleCandidate,
+  importRepoMaterial,
   removeIdentity,
   removeMember,
+  repoImportQuery,
   revokeInvite,
+  searchSources,
   setMemberRole,
   updateIdentity,
   updateTeam,
@@ -45,6 +59,9 @@ const Err = ({ children }: { children: string | null }) =>
       {children}
     </p>
   ) : null
+
+const ghostBtn =
+  'inline-flex h-11 items-center gap-1.5 rounded-control px-3 text-body hover:bg-text/8 disabled:opacity-50 sm:h-8'
 
 const iconBtn =
   'inline-flex h-11 items-center gap-1.5 rounded-control px-3 text-body text-danger hover:bg-text/8 sm:h-8'
@@ -173,6 +190,7 @@ export function IdentitiesArea({ team, director }: AreaProps) {
         ))}
       </ul>
       <Err>{remove.error}</Err>
+      {director && team.sources.length > 0 && <RolesFromMaterial team={team} />}
       {director && (
         <form
           noValidate
@@ -465,6 +483,7 @@ export function MaterialsArea({ team }: AreaProps) {
         </div>
         <Err>{error}</Err>
       </div>
+      <RepoImport team={team} />
       {team.materials.length === 0 && (
         <Empty>Todavía no subiste material.</Empty>
       )}
@@ -495,6 +514,211 @@ export function MaterialsArea({ team }: AreaProps) {
         ))}
       </ul>
       <Err>{remove.error}</Err>
+    </div>
+  )
+}
+
+/** Sources: org repos indexed for search. The form shows only when the server has the import token. */
+function RepoImport({ team }: { team: ManagedTeam }) {
+  const client = useQueryClient()
+  const enabled = useQuery(repoImportQuery).data
+  const [draft, setDraft] = useState({ repo: '', path: '', ref: '' })
+  const [touched, setTouched] = useState(false)
+  const remove = useAction(deleteSource, team.slug)
+  const run = useMutation({
+    mutationFn: (v: { repo: string; path: string; ref: string }) =>
+      importRepoMaterial(team.slug, v),
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: ['manage', team.slug] }),
+  })
+  if (!enabled && team.sources.length === 0) return null
+
+  const missing = !draft.repo.trim()
+  const result = run.data
+  return (
+    <section className="flex flex-col gap-6">
+      <div className="flex flex-col gap-2">
+        <h3 className="text-h3 font-semibold">Fuentes de GitHub</h3>
+        <p className="max-w-prose text-body-lg text-muted">
+          Indexamos los archivos Markdown y de texto de un repo de la
+          organización, para buscar en ellos por palabras y por significado.
+        </p>
+      </div>
+      <ul className="flex flex-col gap-2">
+        {team.sources.map((s) => (
+          <li
+            key={s.id}
+            className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface px-4 py-3"
+          >
+            <span className="flex flex-col">
+              <b className="text-body-lg break-all">
+                {s.repo}
+                {s.folder && `/${s.folder}`}
+                {s.ref !== 'HEAD' && ` @ ${s.ref}`}
+              </b>
+              <span className="text-meta text-muted tabular-nums">
+                {s.fileCount} archivos · {s.chunkCount} fragmentos
+                {s.embeddedCount < s.chunkCount &&
+                  ` · ${s.chunkCount - s.embeddedCount} sin significado`}
+              </span>
+            </span>
+            <span className="flex gap-1">
+              {enabled && (
+                <button
+                  type="button"
+                  className={ghostBtn}
+                  disabled={run.isPending}
+                  onClick={() =>
+                    run.mutate({
+                      repo: s.repo,
+                      path: s.folder,
+                      ref: s.ref === 'HEAD' ? '' : s.ref,
+                    })
+                  }
+                >
+                  <RefreshCw aria-hidden size={14} />
+                  Actualizar
+                </button>
+              )}
+              <button
+                type="button"
+                className={iconBtn}
+                onClick={() => {
+                  if (confirm(`¿Quitar ${s.repo} del índice?`))
+                    remove.mutate({ teamId: team.id, sourceId: s.id })
+                }}
+              >
+                <Trash2 aria-hidden size={14} />
+                Quitar
+              </button>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <Err>{remove.error}</Err>
+      {enabled && (
+        <form
+          noValidate
+          onSubmit={(e: FormEvent) => {
+            e.preventDefault()
+            setTouched(true)
+            if (!missing) run.mutate(draft)
+          }}
+          className="flex max-w-md flex-col gap-4"
+        >
+          <FormField
+            id="import-repo"
+            label="Repo"
+            hint="Por ejemplo: eternum-docs."
+            error={touched && missing ? 'Falta el repo.' : null}
+          >
+            <Field
+              id="import-repo"
+              invalid={touched && missing}
+              value={draft.repo}
+              onChange={(e) => setDraft({ ...draft, repo: e.target.value })}
+            />
+          </FormField>
+          <FormField
+            id="import-path"
+            label="Carpeta (opcional)"
+            hint="Por ejemplo: fuentes/defensa. Vacía, se indexa todo el repo."
+          >
+            <Field
+              id="import-path"
+              value={draft.path}
+              onChange={(e) => setDraft({ ...draft, path: e.target.value })}
+            />
+          </FormField>
+          <FormField
+            id="import-ref"
+            label="Rama (opcional)"
+            hint="Si la dejás vacía, usa la principal."
+          >
+            <Field
+              id="import-ref"
+              value={draft.ref}
+              onChange={(e) => setDraft({ ...draft, ref: e.target.value })}
+            />
+          </FormField>
+          <div>
+            <Button type="submit" variant="primary" size="lg">
+              <GitBranch aria-hidden size={16} />
+              {run.isPending ? 'Indexando…' : 'Indexar'}
+            </Button>
+          </div>
+        </form>
+      )}
+      <Err>{run.error?.message ?? null}</Err>
+      {result && (
+        <p role="status" className="max-w-prose text-body-lg text-muted">
+          Listo: {result.added} archivos nuevos, {result.updated} actualizados y{' '}
+          {result.removed} quitados.
+          {result.embedderDown &&
+            ' El servicio de significado no respondió: por ahora se busca solo por palabras. Actualizá la fuente más tarde.'}
+        </p>
+      )}
+      {team.sources.length > 0 && <SourceSearch team={team} />}
+    </section>
+  )
+}
+
+/** Checks what the index finds, in the words a member would type. */
+function SourceSearch({ team }: { team: ManagedTeam }) {
+  const [query, setQuery] = useState('')
+  const search = useMutation({
+    mutationFn: (q: string) => searchSources(team.id, q),
+  })
+  const VIA: Record<string, string> = {
+    words: 'palabras',
+    meaning: 'significado',
+    both: 'palabras y significado',
+  }
+  return (
+    <div className="flex flex-col gap-3">
+      <h3 className="text-h3 font-semibold">Probar la búsqueda</h3>
+      <form
+        className="flex max-w-md items-end gap-2"
+        onSubmit={(e: FormEvent) => {
+          e.preventDefault()
+          if (query.trim()) search.mutate(query)
+        }}
+      >
+        <div className="flex-1">
+          <Field
+            aria-label="Buscar en las fuentes"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+        <Button type="submit" variant="primary" size="lg">
+          <Search aria-hidden size={16} />
+          Buscar
+        </Button>
+      </form>
+      <Err>{search.error?.message ?? null}</Err>
+      {search.data && search.data.hits.length === 0 && (
+        <Empty>No encontramos nada con eso.</Empty>
+      )}
+      <ul className="flex flex-col gap-2">
+        {search.data?.hits.map((h) => (
+          <li
+            key={h.id}
+            className="flex flex-col gap-1 rounded-card border border-border bg-surface px-4 py-3"
+          >
+            <b className="text-body-lg break-all">{h.path}</b>
+            <span className="text-body text-muted">
+              {h.text.length > 280 ? `${h.text.slice(0, 280)}…` : h.text}
+            </span>
+            <span className="text-meta text-muted">
+              Por {VIA[h.via] ?? h.via}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {search.data && !search.data.semantic && (
+        <p className="text-meta text-muted">Búsqueda solo por palabras.</p>
+      )}
     </div>
   )
 }
@@ -544,5 +768,109 @@ export function SettingsArea({ team, director }: AreaProps) {
         </span>
       </div>
     </form>
+  )
+}
+
+/** Reads the indexed sources for the people who present. Nothing is created until the director picks. */
+function RolesFromMaterial({ team }: { team: ManagedTeam }) {
+  const client = useQueryClient()
+  const [picked, setPicked] = useState<Record<string, boolean>>({})
+  const find = useMutation({
+    mutationFn: () => proposeIdentities(team.id),
+    onSuccess: (found) =>
+      setPicked(Object.fromEntries(found.map((c) => [c.name, true]))),
+  })
+  const add = useMutation({
+    mutationFn: async (chosen: RoleCandidate[]) => {
+      for (const c of chosen) {
+        await addIdentity({
+          teamId: team.id,
+          name: c.name,
+          role: c.role,
+          sectors: c.sectors,
+        })
+      }
+    },
+    onSuccess: () => {
+      find.reset()
+      return client.invalidateQueries({ queryKey: ['manage', team.slug] })
+    },
+  })
+  const found = find.data
+  const chosen = found?.filter((c) => picked[c.name]) ?? []
+
+  return (
+    <section className="flex max-w-prose flex-col gap-3">
+      <h3 className="text-h3 font-semibold">Sacar del material</h3>
+      <p className="text-body-lg text-muted">
+        Leemos las fuentes indexadas y te proponemos quién presenta y con qué
+        rol. Cada propuesta lleva la cita que la respalda; revisala antes de
+        agregarla.
+      </p>
+      <div>
+        <Button
+          variant="primary"
+          size="lg"
+          disabled={find.isPending}
+          onClick={() => find.mutate()}
+        >
+          <Sparkles aria-hidden size={16} />
+          {find.isPending ? 'Leyendo…' : 'Buscar roles en el material'}
+        </Button>
+      </div>
+      <Err>{find.error?.message ?? add.error?.message ?? null}</Err>
+      {found && found.length === 0 && (
+        <Empty>
+          No encontramos integrantes con claridad en el material. Agregalos a
+          mano.
+        </Empty>
+      )}
+      {found && found.length > 0 && (
+        <>
+          <ul className="flex flex-col gap-2">
+            {found.map((c) => (
+              <li
+                key={c.name}
+                className="flex gap-3 rounded-card border border-border bg-surface px-4 py-3"
+              >
+                <input
+                  type="checkbox"
+                  aria-label={`Agregar a ${c.name}`}
+                  className="mt-1 size-4"
+                  checked={!!picked[c.name]}
+                  onChange={(e) =>
+                    setPicked({ ...picked, [c.name]: e.target.checked })
+                  }
+                />
+                <span className="flex flex-col gap-1">
+                  <b className="text-body-lg">
+                    {c.name}
+                    {c.role && ` · ${c.role}`}
+                  </b>
+                  {c.sectors && (
+                    <span className="text-body text-muted">{c.sectors}</span>
+                  )}
+                  <span className="text-meta text-muted">
+                    “{c.evidence}” · {c.path}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <div>
+            <Button
+              variant="primary"
+              size="lg"
+              disabled={chosen.length === 0 || add.isPending}
+              onClick={() => add.mutate(chosen)}
+            >
+              {add.isPending
+                ? 'Agregando…'
+                : `Agregar ${chosen.length} ${chosen.length === 1 ? 'identidad' : 'identidades'}`}
+            </Button>
+          </div>
+        </>
+      )}
+    </section>
   )
 }

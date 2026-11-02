@@ -4,7 +4,11 @@ import { join } from 'node:path'
 import { Catalog } from './catalog.ts'
 import { openDb } from './connection.ts'
 import { runMigrations } from './migrate.ts'
-import { parseEternumData, seedEternum } from './seed-eternum.ts'
+import {
+  parseEternumData,
+  seedEternum,
+  seedEternumFromDisk,
+} from './seed-eternum.ts'
 
 const source = readFileSync(
   join(import.meta.dir, '..', '..', 'seed', 'eternum', 'data.js'),
@@ -62,4 +66,13 @@ test('reads are scoped to the team id', () => {
   expect(catalog.points('not-a-team')).toHaveLength(0)
   expect(catalog.questions('not-a-team', null, 100, 0)).toHaveLength(0)
   expect(catalog.identities('not-a-team')).toHaveLength(0)
+})
+
+test('a fresh database gets the Eternum team at boot, once', () => {
+  const db = openDb(':memory:')
+  runMigrations(db)
+  expect(new Catalog(db).publicTeamBySlug('eternum')).toBeUndefined()
+  expect(seedEternumFromDisk(db).created).toBe(true)
+  expect(new Catalog(db).publicTeamBySlug('eternum')).not.toBeNull()
+  expect(seedEternumFromDisk(db).created).toBe(false)
 })

@@ -1,4 +1,5 @@
 import {
+  blob,
   index,
   integer,
   sqliteTable,
@@ -278,4 +279,113 @@ export const materials = sqliteTable(
     createdAt: createdAt(),
   },
   (t) => [index('materials_team').on(t.teamId)],
+)
+
+/* --- Knowledge: indexed sources (a GitHub repo folder) ------------------------------------------------------------ */
+
+/** A body of text a team indexes. `tree_sha` is the version of what was indexed: same sha, nothing to fetch. */
+export const sources = sqliteTable(
+  'sources',
+  {
+    id: id(),
+    teamId: text('team_id')
+      .notNull()
+      .references(() => teams.id),
+    kind: text('kind').$type<'github'>().notNull(),
+    /** Repo name inside the configured org. */
+    repo: text('repo').notNull(),
+    /** Folder inside the repo ('' = all of it). */
+    folder: text('folder').notNull(),
+    /** Branch, tag or commit ('HEAD' = default branch). */
+    ref: text('ref').notNull(),
+    treeSha: text('tree_sha').notNull(),
+    fileCount: integer('file_count').notNull(),
+    chunkCount: integer('chunk_count').notNull(),
+    /** Chunks that carry an embedding. Fewer than `chunk_count` when the embedder was off or down. */
+    embeddedCount: integer('embedded_count').notNull(),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: createdAt(),
+    syncedAt: text('synced_at').notNull(),
+  },
+  (t) => [
+    index('sources_team').on(t.teamId),
+    uniqueIndex('sources_spec').on(t.teamId, t.repo, t.folder, t.ref),
+  ],
+)
+
+/** One indexed file of a source; `blob_sha` tells a re-sync which files changed. */
+export const sourceFiles = sqliteTable(
+  'source_files',
+  {
+    sourceId: text('source_id')
+      .notNull()
+      .references(() => sources.id, { onDelete: 'cascade' }),
+    path: text('path').notNull(),
+    blobSha: text('blob_sha').notNull(),
+    chunks: integer('chunks').notNull(),
+  },
+  (t) => [uniqueIndex('source_files_path').on(t.sourceId, t.path)],
+)
+
+/** A piece of a file. `emb` is a little-endian float32 vector, null until the embedder has seen it. */
+export const chunks = sqliteTable(
+  'chunks',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    teamId: text('team_id')
+      .notNull()
+      .references(() => teams.id),
+    sourceId: text('source_id')
+      .notNull()
+      .references(() => sources.id, { onDelete: 'cascade' }),
+    path: text('path').notNull(),
+    idx: integer('idx').notNull(),
+    text: text('text').notNull(),
+    /** sha1 of the text: an unchanged chunk keeps its embedding. */
+    hash: text('hash').notNull(),
+    model: text('model'),
+    emb: blob('emb', { mode: 'buffer' }),
+  },
+  (t) => [
+    index('chunks_source').on(t.sourceId),
+    index('chunks_team_hash').on(t.teamId, t.hash),
+  ],
+)
+
+/* --- Authoring: a generated draft of the defense, kept apart until a director approves it ------------------------- */
+
+export type DraftStatus =
+  | 'running'
+  | 'ready'
+  | 'failed'
+  | 'approved'
+  | 'discarded'
+
+/**
+ * One generation. The draft (sections, points, questions) lives here as JSON and reaches the public tables only when
+ * a director approves it, so unreviewed model output is never shown to people practicing.
+ */
+export const generationRuns = sqliteTable(
+  'generation_runs',
+  {
+    id: id(),
+    teamId: text('team_id')
+      .notNull()
+      .references(() => teams.id),
+    status: text('status').$type<DraftStatus>().notNull(),
+    /** 'outline' | 'points' while running. */
+    phase: text('phase').notNull(),
+    total: integer('total').notNull(),
+    done: integer('done').notNull(),
+    error: text('error').notNull(),
+    draft: text('draft', { mode: 'json' }).$type<unknown>(),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: createdAt(),
+    finishedAt: text('finished_at'),
+  },
+  (t) => [index('generation_runs_team').on(t.teamId)],
 )

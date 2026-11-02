@@ -5,6 +5,7 @@ import { meQuery } from '../../lib/account'
 import { manageQuery, roleQuery } from '../../lib/manage'
 import { SignedOut } from '../account/MyTeamsPage'
 import { Empty } from '../practice/parts'
+import { DefenseArea } from './DefenseArea'
 import {
   IdentitiesArea,
   MaterialsArea,
@@ -16,6 +17,7 @@ const AREAS = [
   ['identidades', 'Identidades', IdentitiesArea],
   ['personas', 'Personas', MembersArea],
   ['materiales', 'Materiales', MaterialsArea],
+  ['defensa', 'Defensa', DefenseArea],
   ['ajustes', 'Ajustes', SettingsArea],
 ] as const
 

@@ -30,13 +30,26 @@ export interface ManagedTeam {
     size: number
     createdAt: string
   }[]
+  sources: IndexedSource[]
+}
+
+export interface IndexedSource {
+  id: string
+  repo: string
+  folder: string
+  ref: string
+  fileCount: number
+  chunkCount: number
+  embeddedCount: number
+  syncedAt: string
 }
 
 /** Invites are director-only: a plain member gets the rest of the team without them. */
 const TEAM_BASE = `id slug name visibility myRole
   identities { id key name role sectors }
   members { id userId role handle displayName }
-  materials { id name mime size createdAt }`
+  materials { id name mime size createdAt }
+  sources { id repo folder ref fileCount chunkCount embeddedCount syncedAt }`
 
 export const manageQuery = (slug: string, director: boolean) =>
   queryOptions({
@@ -161,3 +174,163 @@ export async function uploadMaterial(slug: string, file: File): Promise<void> {
     )
   }
 }
+
+/** True when this server can import org repos as team material. */
+export const repoImportQuery = queryOptions({
+  queryKey: ['repo-import'],
+  queryFn: async () =>
+    (
+      await gql<{ capabilities: { repoImport: boolean } }>(
+        `{ capabilities { repoImport } }`,
+      )
+    ).capabilities.repoImport,
+  staleTime: 5 * 60_000,
+})
+
+export interface RepoImportResult {
+  source: IndexedSource
+  added: number
+  updated: number
+  removed: number
+  unchanged: number
+  embedderDown: boolean
+}
+
+export async function importRepoMaterial(
+  slug: string,
+  input: { repo: string; path: string; ref: string },
+): Promise<RepoImportResult> {
+  const res = await fetch(
+    `/api/teams/${encodeURIComponent(slug)}/materials/import`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    },
+  )
+  const body = (await res.json().catch(() => null)) as {
+    import?: RepoImportResult
+    error?: { message?: string }
+  } | null
+  if (!res.ok || !body?.import) {
+    throw new Error(
+      body?.error?.message ?? `No se pudo importar (HTTP ${res.status}).`,
+    )
+  }
+  return body.import
+}
+
+export const deleteSource = (v: { teamId: string; sourceId: string }) =>
+  call(
+    `mutation ($teamId: ID!, $sourceId: ID!) { deleteSource(teamId: $teamId, sourceId: $sourceId) }`,
+    v,
+  )
+
+export interface SearchResult {
+  semantic: boolean
+  hits: { id: string; path: string; text: string; score: number; via: string }[]
+}
+
+export async function searchSources(
+  teamId: string,
+  query: string,
+): Promise<SearchResult> {
+  return (
+    await gql<{ searchSources: SearchResult }>(
+      `query ($teamId: ID!, $query: String!) { searchSources(teamId: $teamId, query: $query) { semantic hits { id path text score via } } }`,
+      { teamId, query },
+    )
+  ).searchSources
+}
+
+export interface RoleCandidate {
+  name: string
+  role: string
+  sectors: string
+  evidence: string
+  path: string
+}
+
+export async function proposeIdentities(
+  teamId: string,
+): Promise<RoleCandidate[]> {
+  return (
+    await gql<{ proposeIdentities: RoleCandidate[] }>(
+      `mutation ($teamId: ID!) { proposeIdentities(teamId: $teamId) { name role sectors evidence path } }`,
+      { teamId },
+    )
+  ).proposeIdentities
+}
+
+export interface DraftQuestion {
+  prompt: string
+  modelAnswer: string
+  path: string
+  evidence: string
+}
+
+export interface DraftPoint {
+  code: string
+  title: string
+  owner: string | null
+  refs: string[]
+  script: string
+  say: string[]
+  status: 'ok' | 'fill'
+  todo: string
+  questions: DraftQuestion[]
+}
+
+export interface Draft {
+  sections: { number: number; title: string; points: DraftPoint[] }[]
+}
+
+export interface Generation {
+  id: string
+  status: 'running' | 'ready' | 'failed' | 'approved' | 'discarded'
+  phase: string
+  total: number
+  done: number
+  error: string
+  draft: Draft | null
+  createdAt: string
+}
+
+/** The latest generation of the team. Polls while it runs; directors only (null for anyone else). */
+export const generationQuery = (slug: string) =>
+  queryOptions({
+    queryKey: ['generation', slug],
+    queryFn: async () =>
+      (
+        await gql<{ team: { generation: Generation | null } }>(
+          `query ($slug: String!) { team(slug: $slug) { generation { id status phase total done error createdAt draft } } }`,
+          { slug },
+        )
+      ).team.generation,
+    refetchInterval: (q) => (q.state.data?.status === 'running' ? 2000 : false),
+  })
+
+export const generateDefense = (teamId: string) =>
+  call<{ generateDefense: { id: string } }>(
+    `mutation ($teamId: ID!) { generateDefense(teamId: $teamId) { id } }`,
+    { teamId },
+  )
+
+export const approveDraft = (v: {
+  teamId: string
+  runId: string
+  skip: string[]
+  owners: Record<string, string | null>
+}) =>
+  call<{ approveDraft: { points: number; questions: number } }>(
+    `mutation ($teamId: ID!, $runId: ID!, $skip: [String!]!, $owners: JSON!) {
+      approveDraft(teamId: $teamId, runId: $runId, skip: $skip, owners: $owners) { points questions }
+    }`,
+    v,
+  ).then((r) => r.approveDraft)
+
+export const discardDraft = (v: { teamId: string; runId: string }) =>
+  call(
+    `mutation ($teamId: ID!, $runId: ID!) { discardDraft(teamId: $teamId, runId: $runId) }`,
+    v,
+  )

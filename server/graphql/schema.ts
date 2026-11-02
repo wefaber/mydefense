@@ -10,6 +10,10 @@ import {
   type SourceRef,
 } from '../ai/grading.ts'
 import { LlmError } from '../ai/llm.ts'
+import { proposeRoles } from '../ai/roles.ts'
+import { startGeneration } from '../authoring.ts'
+import type { GenerationRun } from '../db/authoring.ts'
+import { rolePassages, searchKnowledge, type Hit } from '../knowledge.ts'
 import {
   readDispute,
   readRecap,
@@ -77,6 +81,17 @@ async function guardAsync<T>(fn: () => Promise<T>): Promise<T> {
 function need(ctx: Context): AccountUser {
   if (!ctx.viewer) throw fail('UNAUTHENTICATED', 'Ingresá para continuar.')
   return ctx.viewer
+}
+
+/** The review sends point code -> identity key; anything else in the map is ignored. */
+function ownersOf(raw: unknown): Record<string, string | null> {
+  const out: Record<string, string | null> = {}
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    for (const [code, key] of Object.entries(raw)) {
+      if (typeof key === 'string' || key === null) out[code] = key
+    }
+  }
+  return out
 }
 
 /** Creating a team is for members of the configured GitHub org, re-checked at each GitHub sign-in (ADR 0004). */
@@ -354,6 +369,101 @@ export function buildSchema() {
     }),
   })
 
+  const IndexedSourceRef = builder.objectRef<{
+    id: string
+    repo: string
+    folder: string
+    ref: string
+    fileCount: number
+    chunkCount: number
+    embeddedCount: number
+    syncedAt: string
+  }>('IndexedSource')
+  IndexedSourceRef.implement({
+    fields: (f) => ({
+      id: f.exposeID('id'),
+      repo: f.exposeString('repo'),
+      folder: f.exposeString('folder'),
+      ref: f.exposeString('ref'),
+      fileCount: f.exposeInt('fileCount'),
+      chunkCount: f.exposeInt('chunkCount'),
+      /** Chunks that also have an embedding: fewer than chunkCount while the embedder was off or down. */
+      embeddedCount: f.exposeInt('embeddedCount'),
+      syncedAt: f.exposeString('syncedAt'),
+    }),
+  })
+
+  const RoleCandidateRef = builder.objectRef<{
+    name: string
+    role: string
+    sectors: string
+    evidence: string
+    path: string
+  }>('RoleCandidate')
+  RoleCandidateRef.implement({
+    fields: (f) => ({
+      name: f.exposeString('name'),
+      role: f.exposeString('role'),
+      sectors: f.exposeString('sectors'),
+      /** A literal quote of the source that backs this person. */
+      evidence: f.exposeString('evidence'),
+      path: f.exposeString('path'),
+    }),
+  })
+
+  const GenerationRef = builder.objectRef<GenerationRun>('Generation')
+  GenerationRef.implement({
+    fields: (f) => ({
+      id: f.exposeID('id'),
+      /** running | ready | failed | approved | discarded */
+      status: f.exposeString('status'),
+      /** outline | points while running. */
+      phase: f.exposeString('phase'),
+      total: f.exposeInt('total'),
+      done: f.exposeInt('done'),
+      error: f.exposeString('error'),
+      /** The draft to review: sections, points and questions. Only while status is ready. */
+      draft: f.field({
+        type: 'JSON',
+        nullable: true,
+        resolve: (g) => (g.status === 'ready' ? g.draft : null),
+      }),
+      createdAt: f.exposeString('createdAt'),
+    }),
+  })
+
+  const ApprovalRef = builder.objectRef<{ points: number; questions: number }>(
+    'Approval',
+  )
+  ApprovalRef.implement({
+    fields: (f) => ({
+      points: f.exposeInt('points'),
+      questions: f.exposeInt('questions'),
+    }),
+  })
+
+  const PassageRef = builder.objectRef<Hit>('Passage')
+  PassageRef.implement({
+    fields: (f) => ({
+      id: f.id({ resolve: (h) => String(h.id) }),
+      path: f.exposeString('path'),
+      text: f.exposeString('text'),
+      score: f.exposeFloat('score'),
+      via: f.exposeString('via'),
+    }),
+  })
+
+  const SearchResultRef = builder.objectRef<{
+    semantic: boolean
+    hits: Hit[]
+  }>('SearchResult')
+  SearchResultRef.implement({
+    fields: (f) => ({
+      semantic: f.exposeBoolean('semantic'),
+      hits: f.field({ type: [PassageRef], resolve: (r) => r.hits }),
+    }),
+  })
+
   const TeamRef = builder.objectRef<Team>('Team')
   TeamRef.implement({
     fields: (f) => ({
@@ -389,10 +499,25 @@ export function buildSchema() {
         resolve: (team, _args, ctx) =>
           guard(() => ctx.workspace.invites(need(ctx).id, team.id)),
       }),
+      /** The latest generated draft of the defense. Directors only; null for everyone else. */
+      generation: f.field({
+        type: GenerationRef,
+        nullable: true,
+        resolve: (team, _args, ctx) =>
+          ctx.viewer &&
+          ctx.workspace.roleOf(team.id, ctx.viewer.id) === 'director'
+            ? (ctx.authoring.latest(ctx.viewer.id, team.id) ?? null)
+            : null,
+      }),
       materials: f.field({
         type: [MaterialRef],
         resolve: (team, _args, ctx) =>
           guard(() => ctx.workspace.materials(need(ctx).id, team.id)),
+      }),
+      sources: f.field({
+        type: [IndexedSourceRef],
+        resolve: (team, _args, ctx) =>
+          guard(() => ctx.knowledge.sources(need(ctx).id, team.id)),
       }),
     }),
   })
@@ -507,6 +632,7 @@ export function buildSchema() {
     grading: boolean
     voice: boolean
     githubOrg: string | null
+    repoImport: boolean
   }>('Capabilities')
   CapabilitiesRef.implement({
     fields: (f) => ({
@@ -514,6 +640,8 @@ export function buildSchema() {
       voice: f.exposeBoolean('voice'),
       /** Set when GitHub login is on: the org whose members may create teams. */
       githubOrg: f.exposeString('githubOrg', { nullable: true }),
+      /** True when org repos can be imported as team material. */
+      repoImport: f.exposeBoolean('repoImport'),
     }),
   })
 
@@ -527,7 +655,27 @@ export function buildSchema() {
           grading: !!ctx.ai.llm,
           voice: !!ctx.ai.llm && !!ctx.ai.voice,
           githubOrg: ctx.github?.org ?? null,
+          repoImport: !!ctx.repoImport,
         }),
+      }),
+      /** Search over what the team indexed from repos: words (FTS5) plus meaning when the embedder answers. */
+      searchSources: f.field({
+        type: SearchResultRef,
+        args: {
+          teamId: f.arg.id({ required: true }),
+          query: f.arg.string({ required: true }),
+        },
+        resolve: (_root, args, ctx) =>
+          guardAsync(async () => {
+            const user = await githubViewer(ctx)
+            rateLimit(ctx, `search:${user.id}`, 60, 60_000)
+            return searchKnowledge(
+              { knowledge: ctx.knowledge, embedder: ctx.ai.embedder ?? null },
+              user.id,
+              String(args.teamId),
+              args.query,
+            )
+          }),
       }),
       me: f.field({
         type: UserRef,
@@ -893,6 +1041,135 @@ export function buildSchema() {
               need(ctx).id,
               String(args.teamId),
               String(args.memberId),
+            )
+            return true
+          }),
+      }),
+      /** Reads the indexed sources and proposes who presents. Creates nothing: the director picks. */
+      proposeIdentities: f.field({
+        type: [RoleCandidateRef],
+        args: { teamId: f.arg.id({ required: true }) },
+        resolve: (_root, args, ctx) =>
+          guardAsync(async () => {
+            const user = need(ctx)
+            const teamId = String(args.teamId)
+            if (ctx.knowledge.requireMember(teamId, user.id) !== 'director') {
+              throw fail(
+                'FORBIDDEN',
+                'Solo la dirección del equipo puede hacer esto.',
+              )
+            }
+            if (!ctx.ai.llm) {
+              throw fail(
+                'UNAVAILABLE',
+                'La lectura del material no está disponible en este servidor.',
+              )
+            }
+            if (ctx.knowledge.sourceCount(teamId) === 0) {
+              throw fail('INVALID', 'Primero indexá una fuente de GitHub.')
+            }
+            rateLimit(ctx, `roles:${user.id}`, 5, 600_000)
+            const passages = await rolePassages(
+              { knowledge: ctx.knowledge, embedder: ctx.ai.embedder ?? null },
+              user.id,
+              teamId,
+            )
+            let found
+            try {
+              found = await proposeRoles(ctx.ai.llm, passages)
+            } catch (e) {
+              if (e instanceof LlmError) throw fail('UNAVAILABLE', e.message)
+              throw e
+            }
+            const have = new Set(
+              ctx.catalog
+                .identities(teamId)
+                .flatMap((i) => [i.name.toLowerCase(), i.key]),
+            )
+            return found.filter((c) => !have.has(c.name.toLowerCase()))
+          }),
+      }),
+      /** Starts reading the sources to draft the defense. Returns at once; poll `Team.generation`. */
+      generateDefense: f.field({
+        type: GenerationRef,
+        args: { teamId: f.arg.id({ required: true }) },
+        resolve: (_root, args, ctx) =>
+          guardAsync(async () => {
+            const user = need(ctx)
+            const teamId = String(args.teamId)
+            if (!ctx.ai.llm) {
+              throw fail(
+                'UNAVAILABLE',
+                'La generación no está disponible en este servidor.',
+              )
+            }
+            if (ctx.knowledge.sourceCount(teamId) === 0) {
+              throw fail('INVALID', 'Primero indexá una fuente de GitHub.')
+            }
+            rateLimit(ctx, `generate:${user.id}`, 3, 3_600_000)
+            return startGeneration(
+              {
+                authoring: ctx.authoring,
+                knowledge: ctx.knowledge,
+                catalog: ctx.catalog,
+                llm: ctx.ai.llm,
+                embedder: ctx.ai.embedder ?? null,
+              },
+              user.id,
+              teamId,
+            )
+          }),
+      }),
+      /** Writes the reviewed draft as the team's points and approved questions. */
+      approveDraft: f.field({
+        type: ApprovalRef,
+        args: {
+          teamId: f.arg.id({ required: true }),
+          runId: f.arg.id({ required: true }),
+          /** Point codes and "code#n" question ids left out. */
+          skip: f.arg.stringList({ required: true }),
+          /** point code -> identity key (or null for nobody). */
+          owners: f.arg({ type: 'JSON', required: true }),
+        },
+        resolve: (_root, args, ctx) =>
+          guard(() =>
+            ctx.authoring.approve(
+              need(ctx).id,
+              String(args.teamId),
+              String(args.runId),
+              {
+                skip: new Set(args.skip),
+                owners: ownersOf(args.owners),
+              },
+            ),
+          ),
+      }),
+      discardDraft: f.boolean({
+        args: {
+          teamId: f.arg.id({ required: true }),
+          runId: f.arg.id({ required: true }),
+        },
+        resolve: (_root, args, ctx) =>
+          guard(() => {
+            ctx.authoring.discard(
+              need(ctx).id,
+              String(args.teamId),
+              String(args.runId),
+            )
+            return true
+          }),
+      }),
+      deleteSource: f.boolean({
+        args: {
+          teamId: f.arg.id({ required: true }),
+          sourceId: f.arg.id({ required: true }),
+        },
+        resolve: (_root, args, ctx) =>
+          guard(() => {
+            ctx.knowledge.removeSource(
+              need(ctx).id,
+              String(args.teamId),
+              String(args.sourceId),
             )
             return true
           }),

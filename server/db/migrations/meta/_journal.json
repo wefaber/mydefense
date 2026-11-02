@@ -22,6 +22,20 @@
       "when": 1793569010685,
       "tag": "0002_familiar_preak",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793582688498,
+      "tag": "0003_demonic_punisher",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793584717413,
+      "tag": "0004_milky_mulholland_black",
+      "breakpoints": true
     }
   ]
 }
