@@ -76,7 +76,17 @@ db_path() {
   echo "${line:-$DATA/mydefense.db}"
 }
 
-ACTIVE=$(cat "$STATE/active" 2>/dev/null || echo green)   # first run: pretend green is live, so blue goes up first
+# Which slot is live? The state file is the source of truth; on a host that has never deployed, read the port the
+# enabled snippet points at. Assuming green blind is how a failed first deploy left Nginx proxying the idle slot: the
+# health check fails, the script exits before switching, and the domain keeps 502-ing against the slot that crashed.
+if [[ -s $STATE/active ]]; then
+  ACTIVE=$(cat "$STATE/active")
+else
+  ACTIVE=green
+  for s in blue green; do
+    if grep -q "set \$mydefense_port ${PORT[$s]};" "$SNIPPET" 2>/dev/null; then ACTIVE=$s; fi
+  done
+fi
 IDLE=$(other "$ACTIVE")
 
 if [[ "${1:-}" == --rollback ]]; then
@@ -97,7 +107,13 @@ log "deploying $SHA into $IDLE (live is $ACTIVE)"
 $SYSTEMCTL stop "mydefense@$IDLE" 2>/dev/null || true
 rm -rf "${BASE:?}/$IDLE"
 mkdir -p "$BASE/$IDLE"
+# src/lib is runtime code, not only UI: the server imports pure modules from it (server/ai/recap.ts imports
+# ../../src/lib/simulacro.ts) and Bun resolves the .ts at startup. Leaving it out ships a slot that exits on boot,
+# so the copy list has to cover everything server/ can reach, not just the folders that look like the server.
+mkdir -p "$BASE/$IDLE/src"
 cp -r dist server shared scripts seed package.json bun.lock tsconfig.json tsconfig.server.json "$BASE/$IDLE/"
+# Separate, and into src/: `cp -r src/lib <dest>` copies the directory as <dest>/lib, and the import would miss.
+cp -r src/lib "$BASE/$IDLE/src/"
 ( cd "$BASE/$IDLE" && $BUN install --frozen-lockfile --production )
 echo "$SHA" >"$BASE/$IDLE/REVISION"
 
