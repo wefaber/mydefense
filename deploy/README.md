@@ -19,7 +19,9 @@ numbers match) and exits 1, so a first deploy on a bare VPS fails with the check
 1. Ports 5191/5192 free: `ss -ltn | grep -E ':519[12]'`.
 2. `mkdir -p /home/hermes/apps/mydefense /home/hermes/data/mydefense /home/hermes/deploy/state/mydefense`
 3. `~/deploy/env/mydefense.env` (secrets live here, never in the repo). Needs the four `MYDEFENSE_GITHUB_*` /
-   `MYDEFENSE_PUBLIC_URL` variables together, plus `DEEPSEEK_API_KEY` for grading. `MYDEFENSE_PUBLIC_URL` is
+   `MYDEFENSE_PUBLIC_URL` variables together, plus `DEEPSEEK_API_KEY` for grading and, to import material from org repos
+   (e.g. `eternum-docs`), `MYDEFENSE_GITHUB_IMPORT_TOKEN` (fine-grained token, read-only Contents on the org repos). Add `MYDEFENSE_EMBED_URL=http://127.0.0.1:8891/v1/embeddings`
+   (the `embedder` service of the VPS) so indexed sources are also searched by meaning. `MYDEFENSE_PUBLIC_URL` is
    `https://defense.eternum.lat`; the GitHub OAuth callback is `https://defense.eternum.lat/auth/github/callback`.
 4. `sudo cp deploy/mydefense@.service /etc/systemd/system/ && sudo systemctl daemon-reload`
 5. Nginx: `deploy/nginx/defense.eternum.lat.conf` into `sites-available` + symlink, DNS for `defense.eternum.lat`, TLS

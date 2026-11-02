@@ -436,6 +436,12 @@ test('private teams and their management data stay behind membership', async () 
     `mutation { createInvite(teamId: "${created.data?.createTeam.id}", role: member) { token } }`,
   )
   const token = invite.data?.createInvite.token as string
+  expect(
+    code(
+      await bob.gql(`mutation { acceptInvite(token: "${token}") { slug } }`),
+    ),
+  ).toBe('FORBIDDEN') // a password account cannot join by invite
+  await bob.githubSignIn('bob')
   const joined = await bob.gql(
     `mutation { acceptInvite(token: "${token}") { slug myRole } }`,
   )

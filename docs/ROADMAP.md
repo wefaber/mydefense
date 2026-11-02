@@ -68,6 +68,9 @@ invitar · Ask Ether (dock). Approved by Faku before code.
 - [x] Register / login (`@wefaber/accounts`)
 - [x] Teams, identities, members, invites
 - [x] Material upload (plain HTTP endpoint)
+- [x] Index an org repo as a source (ADR 0005) (`POST /api/teams/:slug/materials/import`): `.md` / `.txt` files of a repo of the
+      GitHub login org become chunks with an FTS5 index and, with the house embedder, vectors; re-sync is incremental by
+      blob sha. Server-side read-only token, org members only. The Eternum team is seeded at every boot
 - [x] Scoped access module + isolation tests
 - [x] GitHub login (OAuth, `read:org`); team creation only for members of the configured org, re-checked every 24 h
       at sign-in ([ADR 0004](adr/0004-github-login-and-org-gated-teams.md))
@@ -98,11 +101,17 @@ Dataminers); the rubric comes from the official "Aspectos a evaluar en defensa".
 
 ### F4 · Authoring pipeline · v0.4.0
 
-- [ ] Text extraction (PDF, MD, DOCX, TXT) and chunking
-- [ ] Generate points and questions (`deep` profile)
+- [~] Text extraction (PDF, MD, DOCX, TXT) and chunking: MD and TXT from repos are chunked and indexed (ADR 0005); PDF
+  and DOCX uploads are not
+- [x] Propose identities (who presents, with role and sectors) from the indexed sources; each proposal carries a quote
+      checked against the passage, and the director picks
+- [x] Generate sections, points and questions from the indexed sources (outline, then one call per point); each
+      question carries a quote checked against its passage
 - [ ] Validator pass (`standard`, separate prompt): checks each answer against its cited chunks, flags unsupported ones
-- [ ] Draft review screen; director approves
-- [ ] Material is treated as data, never as instructions
+      (today only the literal quote is checked, not that the answer follows from it)
+- [x] Draft review screen (Defensa tab); the director picks points, questions and owners and approves. Only for a team
+      with no points yet
+- [x] Material is treated as data, never as instructions (fenced prompts, verified quotes)
 
 ### F5 · Explanations, gen UI, sharing · v0.5.0
 

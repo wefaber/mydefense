@@ -9,6 +9,13 @@ export interface GitHubConfig {
   publicUrl: string
 }
 
+export interface RepoImportConfig {
+  /** Only repos of this org can be imported (the GitHub login org). */
+  org: string
+  /** Fine-grained token with read-only Contents on the org's repos. Server side only: never sent to the browser. */
+  token: string
+}
+
 export interface Config {
   port: number
   host: string
@@ -21,6 +28,8 @@ export interface Config {
   keyFile: string | undefined
   /** GitHub login and org-gated team creation. Null when unset: no GitHub login, and nobody can create a team. */
   github: GitHubConfig | null
+  /** Import of org repos as team material. Null when no token is set. */
+  repoImport: RepoImportConfig | null
 }
 
 const GITHUB_KEYS = [
@@ -49,9 +58,25 @@ export function githubFromEnv(
   }
 }
 
+/** The import token needs the GitHub org to scope itself to; a token without GitHub login stops the boot. */
+export function repoImportFromEnv(
+  env: Record<string, string | undefined>,
+  github: GitHubConfig | null,
+): RepoImportConfig | null {
+  const token = env.MYDEFENSE_GITHUB_IMPORT_TOKEN?.trim()
+  if (!token) return null
+  if (!github) {
+    throw new Error(
+      'MYDEFENSE_GITHUB_IMPORT_TOKEN needs the GitHub login settings (its org scopes the import).',
+    )
+  }
+  return { org: github.org, token }
+}
+
 export function loadConfig(env: Record<string, string | undefined>): Config {
   const root = resolve(import.meta.dir, '..')
   const production = env.NODE_ENV === 'production'
+  const github = githubFromEnv(env)
   const dbPath = env.MYDEFENSE_DB ?? join(root, 'data', 'mydefense.db')
   return {
     port: Number(env.MYDEFENSE_PORT ?? 5191),
@@ -64,6 +89,7 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
         : null,
     production,
     keyFile: env.MYDEFENSE_KEY_FILE,
-    github: githubFromEnv(env),
+    github,
+    repoImport: repoImportFromEnv(env, github),
   }
 }

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { runInNewContext } from 'node:vm'
 import { eq } from 'drizzle-orm'
 import { ulid } from 'ulid'
@@ -279,4 +281,13 @@ export function seedEternum(
   })
 
   return { created: true, teamId, counts }
+}
+
+/** Seeds Eternum from the copy of `data.js` shipped in the repo. Run at every boot: a fresh database has the team. */
+export function seedEternumFromDisk(db: Db): SeedResult {
+  const source = readFileSync(
+    join(import.meta.dir, '..', '..', 'seed', 'eternum', 'data.js'),
+    'utf8',
+  )
+  return seedEternum(db, parseEternumData(source))
 }
