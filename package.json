@@ -4,6 +4,7 @@
   "version": "0.3.9",
   "type": "module",
   "scripts": {
+    "prepare": "lefthook install || true",
     "dev": "bun run scripts/dev.ts",
     "dev:web": "vite",
     "build": "tsc -b && vite build",
@@ -13,9 +14,9 @@
     "lint": "oxlint",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "typecheck": "tsc -b",
+    "typecheck": "bun check",
     "check:repo": "bun run scripts/check-repo.ts",
-    "check": "bun run typecheck && bun run lint && bun run format:check && bun run check:repo && bun run test",
+    "verify": "bun run typecheck && bun run lint && bun run format:check && bun run check:repo && bun run test",
     "db:generate": "drizzle-kit generate",
     "db:seed": "bun run scripts/seed.ts"
   },
@@ -53,6 +54,7 @@
     "@vitejs/plugin-react": "^6.1.2",
     "babel-plugin-react-compiler": "^1.0.0",
     "drizzle-kit": "^0.31.11",
+    "lefthook": "^2.2.2",
     "oxfmt": "^0.75.0",
     "oxlint": "^1.89.0",
     "postcss": "^8.5.32",

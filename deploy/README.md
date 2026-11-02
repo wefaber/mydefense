@@ -1,7 +1,7 @@
 # Deploy
 
 Push to `main` → `.github/workflows/deploy.yml` on the wefaber self-hosted runner → `bun install --frozen-lockfile`,
-`bun run check`, `bun run build`, `deploy/mydefense.sh <sha>`.
+`bun run verify`, `bun run build`, `deploy/mydefense.sh <sha>`.
 
 `mydefense.sh` is blue/green. The idle slot (`/home/hermes/apps/mydefense/{blue,green}`, ports 5191/5192) gets the
 release, runs migrations and the idempotent Eternum seed against the shared database, starts as `mydefense@<slot>`

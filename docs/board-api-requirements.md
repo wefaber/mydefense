@@ -94,7 +94,7 @@ Same service layer as R1, no second implementation. Registry in `services/regist
 
 ## Acceptance
 
-- `bun test` and `tsc --noEmit` green (`bun run check`), with new tests for: bearer auth (missing, wrong, revoked,
+- `bun test` and `tsc --noEmit` green (`bun run verify`), with new tests for: bearer auth (missing, wrong, revoked,
   wrong board), a request with no `Origin` succeeds, limit and body validation, lexical fallback when the embedder is
   down, rate limit 429, audit row written without the token, dates present on passages, Code Mode conformance.
 - Manual: with the embedder tunnel up, `curl` a query ("argon2id contraseñas") with a token and get cited passages with
