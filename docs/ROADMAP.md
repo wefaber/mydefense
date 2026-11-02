@@ -61,7 +61,7 @@ invitar · Ask Ether (dock). Approved by Faku before code.
 - [x] SQLite schema, migrations, Eternum seed + count test
 - [x] SPA: team → identity → Mis puntos / Quiz / Banco / Temas / Ejercicios / Pendientes / Datos, self-grading,
       progress in `localStorage`
-- [ ] Deploy workflow (blue/green, systemd, Nginx); domain to confirm
+- [~] Deploy workflow (blue/green, systemd, Nginx) written, domain `defense.eternum.lat`; first run on the VPS pending
 
 ### F2 · Accounts + CRUD · v0.2.0
 

@@ -1,0 +1,38 @@
+name: Deploy
+
+# A push to main is the only way a release goes out. Blue/green on the VPS: deploy/mydefense.sh brings the idle
+# slot up, checks it, switches Nginx and checks the real domain. Self-hosted runner on purpose and only on push:
+# fork pull requests never reach it (they get CI on a GitHub-hosted runner).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-mydefense
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Put bun on PATH (package scripts call plain `bun`)
+        run: echo /opt/bun >> "$GITHUB_PATH"
+
+      - name: Install
+        run: /opt/bun/bun install --frozen-lockfile
+
+      - name: Check (tsc, oxlint, oxfmt, repo checks, tests)
+        run: /opt/bun/bun run check
+
+      - name: Build
+        run: /opt/bun/bun run build
+
+      - name: Blue/green deploy
+        run: bash deploy/mydefense.sh "${{ github.sha }}"

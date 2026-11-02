@@ -1,0 +1,24 @@
+# Install: sudo cp deploy/mydefense@.service /etc/systemd/system/ && sudo systemctl daemon-reload
+# One instance per slot: mydefense@blue (5191) and mydefense@green (5192). Runs as hermes, loopback only.
+# Env: ~/deploy/env/mydefense.env wins over the Environment= defaults below (systemd reads it later).
+[Unit]
+Description=MyDefense (%i)
+After=network.target
+
+[Service]
+Type=simple
+User=hermes
+WorkingDirectory=/home/hermes/apps/mydefense/%i
+Environment=NODE_ENV=production
+Environment=MYDEFENSE_DB=/home/hermes/data/mydefense/mydefense.db
+EnvironmentFile=/home/hermes/deploy/env/mydefense.env
+ExecStart=/bin/sh -c 'case "%i" in blue) P=5191;; green) P=5192;; esac; MYDEFENSE_PORT=$P exec /opt/bun/bun server/index.ts'
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/home/hermes/data/mydefense
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target

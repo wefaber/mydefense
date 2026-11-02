@@ -1,6 +1,7 @@
 # 0003 · LLM access per team: platform quota, bring-your-own-key, admin
 
-Status: **proposed**, policy for seeded teams decided 2026-11-01 (not built).
+Status: **accepted** for the decisions under "Decided 2026-11-01"; the quota number and admins are still open (see
+"Open questions"). Not built.
 
 ## Context
 
@@ -120,13 +121,20 @@ as the model. Whether the old `deepseek-chat` id is retired is not confirmed.
 
 Dataminers and Nexus are not created yet; they are added with this policy when they exist.
 
+## Decided 2026-11-01
+
+- Corrections and the end-of-session recap run with thinking at `high`.
+- Model: `deepseek-flash`.
+- Who can create teams: members of the configured GitHub org (see [0004](0004-github-login-and-org-gated-teams.md)).
+- Quota is per user, across teams. Eternum calls are not counted against it.
+
 ## Open questions
 
-1. Per-user daily quota for Dataminers and Nexus: value to decide from the cost table above.
-2. Should Eternum be exempt from the global circuit breaker too, or only from its own quota?
-3. Who can create teams (still open from the login discussion): any GitHub user, members of a GitHub org, or manual
-   approval?
-4. Initial `MYDEFENSE_ADMINS` list: whose GitHub logins?
+1. Per-user daily quota, for Dataminers and Nexus and for everyone else on `platform`: 40 calls per day is the working
+   value from the cost table (≈ 0.05 USD per user per day at peak, before thinking is re-measured). Confirm or change.
+2. Does Eternum also skip the global breaker `MYDEFENSE_LLM_DAILY_CALLS`? Proposed: no. A bug should not be able to
+   empty the credits.
+3. `MYDEFENSE_ADMINS`: the GitHub logins of the admins.
 
 ## Links
 
