@@ -5,7 +5,7 @@ study tool (`lux/docs/defensa`) and grows into a generic authoring + practice pl
 
 Two flows:
 
-- **Practice:** pick team → pick identity → practice. No account; progress lives in the browser.
+- **Practice:** pick team → pick identity → practice. GitHub sign-in needed (ADR 0007); progress lives in the browser.
 - **Author:** create team → upload material → process → generate questions → validate with a second model pass →
   director reviews the draft → approve → members and others practice.
 
@@ -31,7 +31,7 @@ project.
 ## Domain model
 
 - `Team` · `Member` (director | member) · `Invite` (hashed token, role, expiry)
-- `Identity`: who presents. Practice picks one; no account needed
+- `Identity`: who presents. Practice picks one; GitHub sign-in needed (ADR 0007)
 - `Defense` (title, date, criteria) · `Section` · `Point` (owner identity, title, script, talking points, refs, status
   ok | fill | pend, what is missing)
 - `Question` (point?, group point | bank | topic | custom (own/cross is derived from the point owner), prompt, model answer, grading spec, refs, status

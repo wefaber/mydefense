@@ -7,6 +7,7 @@ import { runMigrations } from './db/migrate.ts'
 import { parseEternumData, seedEternum } from './db/seed-eternum.ts'
 import { buildServices } from './services.ts'
 import { MAX_QUERY_CHARS } from './graphql/limits.ts'
+import { GITHUB_TEST_CONFIG, githubCookie } from './github-test-session.ts'
 
 const source = readFileSync(
   join(import.meta.dir, '..', 'seed', 'eternum', 'data.js'),
@@ -15,48 +16,71 @@ const source = readFileSync(
 
 const noFiles = { write: async () => {}, remove: async () => {} }
 
-function app() {
+/** A fresh app with a GitHub-linked session; `cookie` is empty for an anonymous client. */
+async function app() {
   const db = openDb(':memory:')
   runMigrations(db)
   seedEternum(db, parseEternumData(source))
-  return createApp({
+  const services = buildServices(
+    { filesDir: '', keyFile: undefined, github: GITHUB_TEST_CONFIG },
+    db,
+    noFiles,
+  )
+  const server = createApp({
     config: { production: true, distDir: null },
     db,
-    services: buildServices({ filesDir: '', keyFile: undefined }, db, noFiles),
+    services,
   })
+  return { server, cookie: await githubCookie(services) }
 }
 
+type App = Awaited<ReturnType<typeof app>>
+
 const gql = (
-  a: ReturnType<typeof app>,
+  a: App,
   query: string,
   method: 'POST' | 'GET' = 'POST',
+  cookie = a.cookie,
 ) =>
   method === 'POST'
-    ? a.handle(
+    ? a.server.handle(
         new Request('http://localhost/graphql', {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', cookie },
           body: JSON.stringify({ query }),
         }),
       )
-    : a.handle(
+    : a.server.handle(
         new Request(
           `http://localhost/graphql?query=${encodeURIComponent(query)}`,
+          { headers: { cookie } },
         ),
       )
 
 test('health and ready', async () => {
-  const a = app()
-  expect((await a.handle(new Request('http://localhost/health'))).status).toBe(
-    200,
-  )
-  const ready = await a.handle(new Request('http://localhost/ready'))
+  const { server } = await app()
+  expect(
+    (await server.handle(new Request('http://localhost/health'))).status,
+  ).toBe(200)
+  const ready = await server.handle(new Request('http://localhost/ready'))
   expect(ready.status).toBe(200)
   expect(await ready.json()).toEqual({ status: 'ready' })
 })
 
+test('teams and practice need a GitHub sign-in, not only a request', async () => {
+  const a = await app()
+  const anon = await gql(a, '{ teams { slug } }', 'POST', '')
+  const body = (await anon.json()) as {
+    errors: { extensions: { code: string } }[]
+  }
+  expect(body.errors[0]?.extensions.code).toBe('UNAUTHENTICATED')
+})
+
 test('graphql lists public teams with their identities', async () => {
-  const res = await gql(app(), '{ teams { slug name identities { name } } }')
+  const res = await gql(
+    await app(),
+    '{ teams { slug name identities { name } } }',
+  )
   const body = (await res.json()) as {
     data: { teams: { slug: string; identities: unknown[] }[] }
   }
@@ -67,7 +91,7 @@ test('graphql lists public teams with their identities', async () => {
 
 test('questions are paged and filtered by group', async () => {
   const res = await gql(
-    app(),
+    await app(),
     '{ team(slug: "eternum") { defense { bank: questions(group: bank) { id } topics: questions(group: topic, first: 5) { id } all: questions(first: 1000) { id } } } }',
   )
   const body = (await res.json()) as {
@@ -82,7 +106,7 @@ test('questions are paged and filtered by group', async () => {
 })
 
 test('unknown team is a NOT_FOUND error with a code', async () => {
-  const res = await gql(app(), '{ team(slug: "nope") { name } }')
+  const res = await gql(await app(), '{ team(slug: "nope") { name } }')
   const body = (await res.json()) as {
     errors: { extensions: { code: string } }[]
   }
@@ -90,13 +114,14 @@ test('unknown team is a NOT_FOUND error with a code', async () => {
 })
 
 test('deep queries are rejected', async () => {
+  const a = await app()
   const ok = await gql(
-    app(),
+    a,
     '{ teams { defense { sections { id } points { id } } identities { id } } }',
   )
   expect(await ok.json()).not.toHaveProperty('errors')
   const res = await gql(
-    app(),
+    a,
     '{ a { b { c { d { e { f { g { h { i } } } } } } } } }',
   )
   const body = (await res.json()) as {
@@ -109,7 +134,7 @@ test('deep queries are rejected', async () => {
 
 test('oversized queries are rejected', async () => {
   const res = await gql(
-    app(),
+    await app(),
     `{ teams { name } }${' '.repeat(MAX_QUERY_CHARS)}`,
   )
   const body = (await res.json()) as {
@@ -119,7 +144,7 @@ test('oversized queries are rejected', async () => {
 })
 
 test('there are no mutations', async () => {
-  const res = await gql(app(), 'mutation { x }')
+  const res = await gql(await app(), 'mutation { x }')
   const body = (await res.json()) as { errors: unknown[] }
   expect(body.errors.length).toBeGreaterThan(0)
 })

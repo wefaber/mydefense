@@ -6,6 +6,7 @@ import { createApp } from './app.ts'
 import { openDb } from './db/connection.ts'
 import { runMigrations } from './db/migrate.ts'
 import { parseEternumData, seedEternum } from './db/seed-eternum.ts'
+import { GITHUB_TEST_CONFIG, githubCookie } from './github-test-session.ts'
 import { buildServices, type Ai } from './services.ts'
 
 const source = readFileSync(
@@ -22,27 +23,32 @@ const REPLY = JSON.stringify({
   feedback: 'Bien.',
 })
 
-function app(ai: Ai) {
+/** A fresh app with a GitHub-linked session: practice needs one (ADR 0007). */
+async function app(ai: Ai) {
   const db = openDb(':memory:')
   runMigrations(db)
   seedEternum(db, parseEternumData(source))
-  return createApp({
+  const services = buildServices(
+    { filesDir: '', keyFile: undefined, github: GITHUB_TEST_CONFIG },
+    db,
+    noFiles,
+    ai,
+  )
+  const server = createApp({
     config: { production: true, distDir: null },
     db,
-    services: buildServices(
-      { filesDir: '', keyFile: undefined },
-      db,
-      noFiles,
-      ai,
-    ),
+    services,
   })
+  return { server, cookie: await githubCookie(services) }
 }
 
-async function gql(a: ReturnType<typeof app>, query: string) {
-  const res = await a.handle(
+type App = Awaited<ReturnType<typeof app>>
+
+async function gql(a: App, query: string) {
+  const res = await a.server.handle(
     new Request('http://localhost/graphql', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', cookie: a.cookie },
       body: JSON.stringify({ query }),
     }),
   )
@@ -62,7 +68,7 @@ const voice = {
     Response.json({ token: 'tok' })) as unknown as typeof fetch,
 }
 
-async function firstQuestionId(a: ReturnType<typeof app>) {
+async function firstQuestionId(a: App) {
   const r = await gql(
     a,
     '{ team(slug: "eternum") { defense { questions(first: 1) { id } } } }',
@@ -72,19 +78,19 @@ async function firstQuestionId(a: ReturnType<typeof app>) {
 
 test('capabilities follow the configured providers', async () => {
   const off = await gql(
-    app({ llm: null, voice: null, evidence: null }),
+    await app({ llm: null, voice: null, evidence: null }),
     '{ capabilities { grading voice } }',
   )
   expect(off.data!.capabilities).toEqual({ grading: false, voice: false })
   const on = await gql(
-    app({ llm: llm(), voice, evidence: null }),
+    await app({ llm: llm(), voice, evidence: null }),
     '{ capabilities { grading voice } }',
   )
   expect(on.data!.capabilities).toEqual({ grading: true, voice: true })
 })
 
 test('grading is unavailable without a model', async () => {
-  const a = app({ llm: null, voice: null, evidence: null })
+  const a = await app({ llm: null, voice: null, evidence: null })
   const id = await firstQuestionId(a)
   const r = await gql(
     a,
@@ -95,7 +101,7 @@ test('grading is unavailable without a model', async () => {
 
 test('an answer is graded against the stored reference, and the reference never leaves in the error path', async () => {
   const seen: string[] = []
-  const a = app({ llm: llm(seen), voice, evidence: null })
+  const a = await app({ llm: llm(seen), voice, evidence: null })
   const id = await firstQuestionId(a)
   const r = await gql(
     a,
@@ -109,7 +115,7 @@ test('an answer is graded against the stored reference, and the reference never 
 })
 
 test('a question of another team or an unknown id is NOT_FOUND', async () => {
-  const a = app({ llm: llm(), voice, evidence: null })
+  const a = await app({ llm: llm(), voice, evidence: null })
   const r = await gql(
     a,
     'mutation { gradeAnswer(teamSlug: "eternum", questionId: "nope", answer: "una respuesta larga y completa") { verdict } }',
@@ -123,7 +129,7 @@ test('a question of another team or an unknown id is NOT_FOUND', async () => {
 })
 
 test('grading is rate limited per client', async () => {
-  const a = app({ llm: llm(), voice, evidence: null })
+  const a = await app({ llm: llm(), voice, evidence: null })
   const id = await firstQuestionId(a)
   const q = `mutation { gradeAnswer(teamSlug: "eternum", questionId: "${id}", answer: "una respuesta larga y completa") { verdict } }`
   let limited = false
@@ -136,7 +142,7 @@ test('grading is rate limited per client', async () => {
 
 test('voiceToken returns a short-lived token and is off without a key', async () => {
   const on = await gql(
-    app({ llm: llm(), voice, evidence: null }),
+    await app({ llm: llm(), voice, evidence: null }),
     'mutation { voiceToken { token expiresIn version } }',
   )
   expect(on.data!.voiceToken).toEqual({
@@ -145,7 +151,7 @@ test('voiceToken returns a short-lived token and is off without a key', async ()
     version: 'v',
   })
   const off = await gql(
-    app({ llm: llm(), voice: null, evidence: null }),
+    await app({ llm: llm(), voice: null, evidence: null }),
     'mutation { voiceToken { token } }',
   )
   expect(off.errors?.[0]?.extensions?.code).toBe('UNAVAILABLE')
