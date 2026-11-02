@@ -124,21 +124,23 @@ async function creatorAccess(ctx: Context, userId: string): Promise<void> {
   }
 }
 
-/** Joining a team by invite needs a GitHub sign-in, so an invite link alone is not enough (ADR 0006). */
-async function joinerAccess(ctx: Context, userId: string): Promise<void> {
+/** Teams and practice need a GitHub sign-in, not only an account (ADR 0007). */
+async function githubViewer(ctx: Context): Promise<AccountUser> {
+  const viewer = need(ctx)
   if (!ctx.github) {
     throw fail(
       'UNAVAILABLE',
-      'Unirse a equipos no está disponible en este servidor.',
+      'Los equipos no están disponibles en este servidor.',
     )
   }
-  const link = await ctx.githubLinks.findByUser(userId)
+  const link = await ctx.githubLinks.findByUser(viewer.id)
   if (!link) {
     throw fail(
       'FORBIDDEN',
-      'Para entrar a un equipo entrá con GitHub desde la página de cuenta.',
+      'Para ver y practicar entrá con GitHub desde la página de cuenta.',
     )
   }
+  return viewer
 }
 
 function rateLimit(
@@ -665,7 +667,7 @@ export function buildSchema() {
         },
         resolve: (_root, args, ctx) =>
           guardAsync(async () => {
-            const user = need(ctx)
+            const user = await githubViewer(ctx)
             rateLimit(ctx, `search:${user.id}`, 60, 60_000)
             return searchKnowledge(
               { knowledge: ctx.knowledge, embedder: ctx.ai.embedder ?? null },
@@ -689,16 +691,17 @@ export function buildSchema() {
       }),
       teams: f.field({
         type: [TeamRef],
-        resolve: (_root, _args, ctx) => ctx.catalog.publicTeams(),
+        resolve: async (_root, _args, ctx) => {
+          await githubViewer(ctx)
+          return ctx.catalog.publicTeams()
+        },
       }),
       team: f.field({
         type: TeamRef,
         args: { slug: f.arg.string({ required: true }) },
-        resolve: (_root, args, ctx) => {
-          const team = ctx.workspace.visibleTeamBySlug(
-            args.slug,
-            ctx.viewer?.id ?? null,
-          )
+        resolve: async (_root, args, ctx) => {
+          const viewer = await githubViewer(ctx)
+          const team = ctx.workspace.visibleTeamBySlug(args.slug, viewer.id)
           if (!team) throw fail('NOT_FOUND', 'No encontramos ese equipo.')
           return team
         },
@@ -771,15 +774,13 @@ export function buildSchema() {
           note: f.arg.string(),
         },
         resolve: async (_root, args, ctx) => {
+          const viewer = await githubViewer(ctx)
           if (!ctx.ai.llm)
             throw fail('UNAVAILABLE', 'La corrección no está disponible.')
           const ip = clientKey(ctx.request, null)
           rateLimit(ctx, `grade:ip:${ip}`, 30, 600_000)
           rateLimit(ctx, 'grade:all', 2000, 86_400_000)
-          const team = ctx.workspace.visibleTeamBySlug(
-            args.teamSlug,
-            ctx.viewer?.id ?? null,
-          )
+          const team = ctx.workspace.visibleTeamBySlug(args.teamSlug, viewer.id)
           const q =
             team && ctx.catalog.question(team.id, String(args.questionId))
           if (!q) throw fail('NOT_FOUND', 'No encontramos esa pregunta.')
@@ -824,6 +825,7 @@ export function buildSchema() {
           dispute: f.arg.string(),
         },
         resolve: async (_root, args, ctx) => {
+          const viewer = await githubViewer(ctx)
           if (!ctx.ai.llm)
             throw fail('UNAVAILABLE', 'La corrección no está disponible.')
           // Shares the grading budget: a recap is one more model call.
@@ -834,10 +836,7 @@ export function buildSchema() {
             600_000,
           )
           rateLimit(ctx, 'grade:all', 2000, 86_400_000)
-          const team = ctx.workspace.visibleTeamBySlug(
-            args.teamSlug,
-            ctx.viewer?.id ?? null,
-          )
+          const team = ctx.workspace.visibleTeamBySlug(args.teamSlug, viewer.id)
           if (!team) throw fail('NOT_FOUND', 'No encontramos ese equipo.')
           const answers = readRecapAnswers(args.answers)
           if (!answers)
@@ -854,6 +853,7 @@ export function buildSchema() {
       voiceToken: f.field({
         type: VoiceTokenRef,
         resolve: async (_root, _args, ctx) => {
+          await githubViewer(ctx)
           if (!ctx.ai.llm || !ctx.ai.voice)
             throw fail('UNAVAILABLE', 'La voz no está disponible.')
           rateLimit(
@@ -1009,8 +1009,7 @@ export function buildSchema() {
         args: { token: f.arg.string({ required: true }) },
         resolve: async (_root, args, ctx) => {
           rateLimit(ctx, `invite:${clientKey(ctx.request, null)}`, 20, 900_000)
-          const viewer = need(ctx)
-          await joinerAccess(ctx, viewer.id)
+          const viewer = await githubViewer(ctx)
           return guard(() => ctx.workspace.acceptInvite(viewer.id, args.token))
         },
       }),

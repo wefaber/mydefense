@@ -1,6 +1,6 @@
 # MyDefense
 
-Public WeFaber product where any team practices a project defense. Practice needs no account; authoring (F2+) does.
+Public WeFaber product where any team practices a project defense. Practice needs a GitHub sign-in (ADR 0007); authoring (F2+) needs an account.
 Plan and phases: [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Read before working

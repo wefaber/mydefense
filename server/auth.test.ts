@@ -387,7 +387,7 @@ test('members of a public team cannot read what only members see, outsiders get 
   const alice = browser(server)
   const carol = browser(server)
   await alice.githubSignIn('alice')
-  await register(carol, 'carol')
+  await carol.githubSignIn('carol')
   await alice.gql(
     'mutation { createTeam(name: "Abierto", visibility: public) { id } }',
   )
@@ -418,11 +418,17 @@ test('private teams and their management data stay behind membership', async () 
     myRole: 'director',
   })
 
-  for (const who of [anon, bob]) {
-    expect(code(await who.gql('{ team(slug: "secreto") { name } }'))).toBe(
-      'NOT_FOUND',
-    )
-  }
+  const carol = browser(server)
+  await carol.githubSignIn('carol')
+  expect(code(await anon.gql('{ team(slug: "secreto") { name } }'))).toBe(
+    'UNAUTHENTICATED',
+  )
+  expect(code(await bob.gql('{ team(slug: "secreto") { name } }'))).toBe(
+    'FORBIDDEN', // a password account cannot read teams (ADR 0007)
+  )
+  expect(code(await carol.gql('{ team(slug: "secreto") { name } }'))).toBe(
+    'NOT_FOUND', // signed in with GitHub, but not a member
+  )
   expect(
     (
       await alice.gql(
@@ -430,7 +436,7 @@ test('private teams and their management data stay behind membership', async () 
       )
     ).data?.team.members,
   ).toHaveLength(1)
-  expect((await anon.gql('{ teams { slug } }')).data?.teams).toHaveLength(0)
+  expect(code(await anon.gql('{ teams { slug } }'))).toBe('UNAUTHENTICATED')
 
   const invite = await alice.gql(
     `mutation { createInvite(teamId: "${created.data?.createTeam.id}", role: member) { token } }`,
