@@ -15,6 +15,7 @@ DOMAIN="${MYDEFENSE_DOMAIN:-defense.eternum.lat}"
 declare -A PORT=([blue]=5191 [green]=5192)
 
 UNIT=/etc/systemd/system/mydefense@.service
+UNITD=/etc/systemd/system
 ENV_FILE=/home/hermes/deploy/env/mydefense.env
 DATA=/home/hermes/data/mydefense
 
@@ -44,6 +45,12 @@ preflight() { # slot
   for p in "$BASE" "$DATA" "$STATE"; do [[ -d $p && -w $p ]] || miss+=("2. directory missing or not writable: $p"); done
   [[ -r $ENV_FILE ]] || miss+=("3. env file missing or unreadable: $ENV_FILE")
   [[ -f $UNIT ]] || miss+=("4. systemd unit not installed: $UNIT (then: sudo systemctl daemon-reload)")
+  # The unit is a template: the slot's port only exists in its drop-in. Without it the app falls back to
+  # server/config.ts (5191), so a start of green silently collides with blue and Nginx 502s.
+  for p in blue green; do
+    [[ -f $UNITD/mydefense@$p.service.d/port.conf ]] ||
+      miss+=("4. slot port drop-in missing: $UNITD/mydefense@$p.service.d/port.conf")
+  done
   [[ -f $SNIPPET ]] || miss+=("5. nginx snippet missing: $SNIPPET (initial: set \$mydefense_port 5191;)")
   # -R, not -r: sites-enabled/ entries are symlinks into sites-available, and grep -r does not follow a
   # symlink it meets while recursing. With -r this check fails on every vhost installed the house way.
