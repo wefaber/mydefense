@@ -23,7 +23,11 @@ numbers match) and exits 1, so a first deploy on a bare VPS fails with the check
    (e.g. `eternum-docs`), `MYDEFENSE_GITHUB_IMPORT_TOKEN` (fine-grained token, read-only Contents on the org repos). Add `MYDEFENSE_EMBED_URL=http://127.0.0.1:8891/v1/embeddings`
    (the `embedder` service of the VPS) so indexed sources are also searched by meaning. `MYDEFENSE_PUBLIC_URL` is
    `https://defense.eternum.lat`; the GitHub OAuth callback is `https://defense.eternum.lat/auth/github/callback`.
-4. `sudo cp deploy/mydefense@.service /etc/systemd/system/ && sudo systemctl daemon-reload`
+4. systemd: `sudo cp -r deploy/mydefense@.service deploy/mydefense@blue.service.d deploy/mydefense@green.service.d /etc/systemd/system/ && sudo systemctl daemon-reload`.
+   The unit is a template: each slot's port lives only in its drop-in (`Environment=MYDEFENSE_PORT=5191|5192`).
+   Without it the app falls back to the `5191` default in `server/config.ts`, so green fights blue for the port.
+   Then `sudo systemctl enable mydefense@<live slot>` — `mydefense.sh` starts slots but never enables them, so on a
+   reboot nothing comes back and the domain 502s until someone starts it by hand.
 5. Nginx: `deploy/nginx/defense.eternum.lat.conf` into `sites-available` + symlink, DNS for `defense.eternum.lat`, TLS
    like the other vhosts, and an initial `snippets/mydefense-active.conf` containing `set $mydefense_port 5191;`.
 6. sudoers for the runner user, passwordless and limited to: `systemctl start|stop|status` on `mydefense@*`,
